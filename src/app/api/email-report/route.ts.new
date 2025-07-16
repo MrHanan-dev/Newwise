@@ -1,0 +1,491 @@
+import { NextResponse } from 'next/server';
+import nodemailer from 'nodemailer';
+import { jsPDF } from 'jspdf';
+import fetch from 'node-fetch';
+
+// Main API handler
+export async function POST(request: Request) {
+  try {
+    const { reports } = await request.json();
+    
+    if (!reports || !reports.length) {
+      return NextResponse.json({ error: 'No reports provided' }, { status: 400 });
+    }
+    
+    try {
+      // Generate PDF
+      console.log("Generating PDF...");
+      const pdfBuffer = await generatePDF(reports);
+      console.log("PDF generated successfully");
+      
+      // Send email with PDF attachment
+      console.log("Sending email...");
+      await sendEmail(pdfBuffer);
+      console.log("Email sent successfully");
+      
+      return NextResponse.json({ success: true });
+    } catch (error) {
+      console.error("Specific error in PDF generation or email sending:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return NextResponse.json({ 
+        error: 'Failed in PDF generation or email sending', 
+        details: errorMessage 
+      }, { status: 500 });
+    }
+  } catch (error) {
+    console.error("General error handling request:", error);
+    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
+  }
+}
+
+// Helper function to fetch image as base64
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Error fetching image: ${response.statusText}`);
+      return null;
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Use Buffer for server-side base64 encoding
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    
+    // Determine image format from URL or Content-Type header
+    let imageFormat = 'JPEG'; // Default format
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType?.includes('png')) {
+      imageFormat = 'PNG';
+    } else if (contentType?.includes('gif')) {
+      imageFormat = 'GIF';
+    } else if (url.toLowerCase().endsWith('.png')) {
+      imageFormat = 'PNG';
+    } else if (url.toLowerCase().endsWith('.gif')) {
+      imageFormat = 'GIF';
+    }
+    
+    return `data:image/${imageFormat.toLowerCase()};base64,${base64}`;
+  } catch (error) {
+    console.error('Error fetching image:', error);
+    return null;
+  }
+}
+
+// Process all photos and add them to issues
+async function processAllPhotos(reports: any[]) {
+  for (const report of reports) {
+    if (report.issues && Array.isArray(report.issues)) {
+      for (const issue of report.issues) {
+        if (issue.photos && Array.isArray(issue.photos)) {
+          // Process each photo
+          const processedPhotos = [];
+          for (let i = 0; i < issue.photos.length; i++) {
+            const photoUrl = issue.photos[i];
+            if (photoUrl && typeof photoUrl === 'string') {
+              try {
+                const imageData = await fetchImageAsBase64(photoUrl);
+                processedPhotos.push({ 
+                  index: i, 
+                  photoUrl, 
+                  imageData, 
+                  success: !!imageData 
+                });
+              } catch (error) {
+                console.error(`Error fetching image ${i}:`, error);
+                processedPhotos.push({ 
+                  index: i, 
+                  photoUrl, 
+                  imageData: null, 
+                  success: false 
+                });
+              }
+            } else {
+              processedPhotos.push({ 
+                index: i, 
+                photoUrl: null, 
+                imageData: null, 
+                success: false 
+              });
+            }
+          }
+          issue.processedPhotos = processedPhotos;
+        }
+      }
+    }
+  }
+}
+
+// Generate PDF from report data
+async function generatePDF(reports: any[]) {
+  try {
+    // First, process all photos before creating the PDF
+    await processAllPhotos(reports);
+    
+    // Create a new jsPDF document (A4 portrait)
+    const doc = new jsPDF();
+    
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    let y = margin;
+    
+    // Function to check if we need a new page
+    function checkForNewPage(height: number) {
+      if (y + height > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+        return true;
+      }
+      return false;
+    }
+    
+    // Add header with title
+    doc.setFontSize(24);
+    doc.setTextColor(30, 64, 175); // #1e40af in RGB
+    doc.setFont("helvetica", "bold");
+    
+    // Center text
+    const titleText = "ShiftWise";
+    const titleWidth = doc.getStringUnitWidth(titleText) * doc.getFontSize() / doc.internal.scaleFactor;
+    doc.text(titleText, (pageWidth - titleWidth) / 2, y);
+    y += 10;
+    
+    // Subtitle
+    doc.setFontSize(16);
+    const subtitleText = "Daily Issue Report";
+    const subtitleWidth = doc.getStringUnitWidth(subtitleText) * doc.getFontSize() / doc.internal.scaleFactor;
+    doc.text(subtitleText, (pageWidth - subtitleWidth) / 2, y);
+    y += 10;
+    
+    // Date
+    doc.setFontSize(12);
+    doc.setTextColor(75, 85, 99); // #4b5563 in RGB
+    doc.setFont("helvetica", "normal");
+    
+    const dateText = `Report Date: ${new Date().toLocaleDateString()}`;
+    const dateWidth = doc.getStringUnitWidth(dateText) * doc.getFontSize() / doc.internal.scaleFactor;
+    doc.text(dateText, (pageWidth - dateWidth) / 2, y);
+    y += 20;
+    
+    // Group by status for summary
+    const statusCounts: Record<string, number> = {};
+    let totalIssues = 0;
+    
+    reports.forEach(report => {
+      if (report.issues && Array.isArray(report.issues)) {
+        report.issues.forEach((issue: any) => {
+          statusCounts[issue.status] = (statusCounts[issue.status] || 0) + 1;
+          totalIssues++;
+        });
+      }
+    });
+    
+    // Summary section
+    doc.setTextColor(30, 64, 175);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Summary", margin, y);
+    y += 8;
+    
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Total Issues: ${totalIssues}`, margin, y);
+    y += 6;
+    
+    // Status counts
+    Object.entries(statusCounts).forEach(([status, count]) => {
+      const rgbColor = getStatusColorRGB(status);
+      doc.setTextColor(rgbColor.r, rgbColor.g, rgbColor.b);
+      doc.text(`${status}: ${count} issue${count !== 1 ? 's' : ''}`, margin, y);
+      y += 6;
+    });
+    y += 10;
+    
+    // Detailed issues
+    doc.setTextColor(30, 64, 175);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Detailed Issues", margin, y);
+    y += 15;
+    
+    // Process each report
+    reports.forEach((report, reportIndex) => {
+      if (reportIndex > 0) {
+        doc.addPage();
+        y = margin;
+      }
+      
+      // Submitter info
+      doc.setTextColor(75, 85, 99); // Gray
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      
+      if (report.submittedBy) {
+        doc.text(`Submitted by: ${report.submittedBy}`, margin, y);
+        y += 6;
+      }
+      
+      if (report.reportDate) {
+        const date = report.reportDate.seconds ? 
+          new Date(report.reportDate.seconds * 1000) : 
+          new Date(report.reportDate);
+        
+        doc.text(`Report Date: ${date.toLocaleDateString()}`, margin, y);
+        y += 6;
+      }
+      
+      y += 5;
+      
+      // Process issues in this report
+      if (report.issues && Array.isArray(report.issues)) {
+        report.issues.forEach((issue: any, issueIndex: number) => {
+          // Check if we need a new page
+          if (checkForNewPage(100)) { // Estimate height needed for issue
+            // Reset y position for new page
+            y = margin;
+          }
+          
+          // Draw a gray line to separate issues
+          doc.setDrawColor(229, 231, 235); // #e5e7eb
+          doc.setLineWidth(0.5);
+          doc.line(margin, y, pageWidth - margin, y);
+          y += 5;
+          
+          // Issue number and status
+          doc.setFontSize(14);
+          doc.setTextColor(30, 64, 175); // Blue
+          doc.setFont("helvetica", "bold");
+          doc.text(`Issue #${issueIndex + 1}`, margin, y);
+          
+          // Status with color
+          const statusRGB = getStatusColorRGB(issue.status);
+          doc.setTextColor(statusRGB.r, statusRGB.g, statusRGB.b);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "normal");
+          
+          const statusText = `[${issue.status || 'No Status'}]`;
+          const statusWidth = doc.getStringUnitWidth(statusText) * doc.getFontSize() / doc.internal.scaleFactor;
+          doc.text(statusText, pageWidth - margin - statusWidth, y);
+          y += 8;
+          
+          // Title
+          if (issue.issue) {
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            
+            // Handle long titles by wrapping text
+            const titleLines = doc.splitTextToSize(issue.issue, pageWidth - 2 * margin);
+            doc.text(titleLines, margin, y);
+            y += titleLines.length * 7;
+          }
+          
+          // PMUN if available
+          if (issue.pmun) {
+            doc.setTextColor(75, 85, 99);
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "normal");
+            doc.text(`PMUN: ${issue.pmun}`, margin, y);
+            y += 6;
+          }
+          
+          // Description
+          if (issue.description) {
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "bold");
+            doc.text("Description:", margin, y);
+            y += 6;
+            
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(55, 65, 81); // #374151
+            
+            // Split long descriptions into multiple lines to fit page width
+            const descriptionLines = doc.splitTextToSize(issue.description, pageWidth - 2 * margin);
+            
+            // Check if description needs a new page
+            if (checkForNewPage(descriptionLines.length * 5)) {
+              y = margin;
+            }
+            
+            doc.text(descriptionLines, margin, y);
+            y += descriptionLines.length * 5 + 5;
+          }
+          
+          // Actions if available
+          if (issue.actions) {
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "bold");
+            doc.text("Actions:", margin, y);
+            y += 6;
+            
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(55, 65, 81);
+            
+            const actionLines = doc.splitTextToSize(issue.actions, pageWidth - 2 * margin);
+            
+            // Check if actions need a new page
+            if (checkForNewPage(actionLines.length * 5)) {
+              y = margin;
+            }
+            
+            doc.text(actionLines, margin, y);
+            y += actionLines.length * 5 + 5;
+          }
+          
+          // Photos
+          if (issue.processedPhotos && issue.processedPhotos.length > 0) {
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "bold");
+            doc.text("Photos:", margin, y);
+            y += 6;
+            
+            // First show the count
+            doc.setFont("helvetica", "italic");
+            doc.setTextColor(107, 114, 128); // #6b7280
+            doc.text(`${issue.processedPhotos.length} photo(s) attached to this issue:`, margin, y);
+            y += 10;
+            
+            // Use pre-fetched image data
+            for (const result of issue.processedPhotos) {
+              // Check if we need a new page for the image
+              if (y > pageHeight - 100) {
+                doc.addPage();
+                y = margin;
+              }
+              
+              if (result.success && result.imageData) {
+                // Calculate dimensions to fit within margins
+                const maxWidth = pageWidth - (2 * margin);
+                const maxHeight = 120; // Maximum height for an image
+                
+                try {
+                  // Add the image with fixed dimensions
+                  doc.addImage(
+                    result.imageData,
+                    'JPEG',
+                    margin,
+                    y,
+                    maxWidth,
+                    maxHeight,
+                    `img-${issue.id || 'photo'}-${result.index}`,
+                    'MEDIUM',
+                    0
+                  );
+                  
+                  y += maxHeight + 10; // Add some space after the image
+                } catch (addError) {
+                  console.error('Error adding image to PDF:', addError);
+                  doc.setFont("helvetica", "italic");
+                  doc.setTextColor(239, 68, 68); // Red
+                  doc.text(`[Error embedding image]`, margin, y);
+                  y += 6;
+                }
+              } else {
+                doc.setFont("helvetica", "italic");
+                doc.setTextColor(239, 68, 68); // Red
+                const displayUrl = result.photoUrl ? result.photoUrl.substring(0, 40) + '...' : '[missing URL]';
+                doc.text(`[Could not load image: ${displayUrl}]`, margin, y);
+                y += 6;
+              }
+            }
+          }
+          // Handle cases where we don't have pre-processed photos but do have photo URLs
+          else if (issue.photos && Array.isArray(issue.photos) && issue.photos.length > 0) {
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "bold");
+            doc.text("Photos:", margin, y);
+            y += 6;
+            
+            doc.setFont("helvetica", "italic");
+            doc.setTextColor(107, 114, 128); // #6b7280
+            doc.text(`${issue.photos.length} photo(s) attached to this issue. (Not embedded)`, margin, y);
+            y += 5;
+          }
+          
+          y += 10; // Extra space between issues
+        });
+      }
+    });
+    
+    // Add page numbers
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(10);
+      doc.setTextColor(107, 114, 128); // #6b7280
+      doc.setFont("helvetica", "normal");
+      
+      const pageText = `Page ${i} of ${totalPages}`;
+      const pageTextWidth = doc.getStringUnitWidth(pageText) * doc.getFontSize() / doc.internal.scaleFactor;
+      doc.text(pageText, (pageWidth - pageTextWidth) / 2, pageHeight - 10);
+    }
+    
+    // Get PDF as buffer
+    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+    return pdfBuffer;
+    
+  } catch (error) {
+    console.error("Error generating PDF:", error);
+    throw error;
+  }
+}
+
+// Helper function to get status color
+function getStatusColorRGB(status?: string) {
+  switch (status?.toLowerCase()) {
+    case 'open': return { r: 239, g: 68, b: 68 }; // red
+    case 'in progress': return { r: 245, g: 158, b: 11 }; // amber
+    case 'completed': return { r: 16, g: 185, b: 129 }; // green
+    case 'escalated': return { r: 139, g: 92, b: 246 }; // purple
+    default: return { r: 107, g: 114, b: 128 }; // gray
+  }
+}
+
+// Send email with PDF attachment
+async function sendEmail(pdfBuffer: Buffer) {
+  // Create a nodemailer transporter
+  const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.example.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER || 'user@example.com',
+      pass: process.env.EMAIL_PASSWORD || 'password',
+    },
+  });
+  
+  const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
+  
+  // Setup email data
+  const mailOptions = {
+    from: process.env.EMAIL_FROM || 'ShiftWise <shiftwise@example.com>',
+    to: process.env.EMAIL_RECIPIENT || 'recipient@example.com',
+    subject: `ShiftWise Daily Issue Report - ${dateStr}`,
+    text: 'Please find attached the daily issues report.',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1e40af; text-align: center; margin-top: 30px;">ShiftWise Daily Report</h2>
+        <p>Please find attached the daily issues report for ${dateStr}.</p>
+        <p>This report was automatically generated by ShiftWise and includes all issues reported in the last 24 hours.</p>
+        <p style="margin-top: 30px; color: #6b7280;">This is an automated email, please do not reply.</p>
+      </div>
+    `,
+    attachments: [
+      {
+        filename: `ShiftWise-Daily-Report-${dateStr}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      },
+    ],
+  };
+  
+  // Send email
+  await transporter.sendMail(mailOptions);
+}
