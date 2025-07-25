@@ -38,16 +38,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-background text-foreground px-2 sm:px-4">
-      <Card className="w-full max-w-xs sm:max-w-md md:max-w-lg shadow-xl bg-card text-card-foreground">
+    <div className="relative min-h-screen flex items-center justify-center bg-background dark:bg-gray-900 text-foreground dark:text-gray-100 px-2 sm:px-4">
+      <Card className="w-full max-w-xs sm:max-w-md md:max-w-lg shadow-xl bg-card dark:bg-gray-800 text-card-foreground dark:text-gray-100">
         <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-2xl sm:text-3xl font-bold text-primary">Welcome Back</CardTitle>
-          <p className="text-muted-foreground text-xs sm:text-sm">Log in to submit or view shift reports</p>
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-primary dark:text-gray-100">Welcome Back</CardTitle>
+          <p className="text-muted-foreground dark:text-gray-300 text-xs sm:text-sm">Log in to submit or view shift reports</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
             <div className="space-y-1">
-              <label htmlFor="email" className="block text-sm font-medium text-foreground">Email</label>
+              <label htmlFor="email" className="block text-sm font-medium text-foreground dark:text-gray-100">Email</label>
               <Input
                 id="email"
                 type="email"
@@ -55,10 +55,11 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="bg-card dark:bg-gray-700 text-foreground dark:text-gray-100"
               />
             </div>
             <div className="space-y-1">
-              <label htmlFor="password" className="block text-sm font-medium text-foreground">Password</label>
+              <label htmlFor="password" className="block text-sm font-medium text-foreground dark:text-gray-100">Password</label>
               <Input
                 id="password"
                 type="password"
@@ -66,6 +67,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                className="bg-card dark:bg-gray-700 text-foreground dark:text-gray-100"
               />
             </div>
             {error && (

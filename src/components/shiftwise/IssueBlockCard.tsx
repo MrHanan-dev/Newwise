@@ -113,9 +113,9 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
         name={`issues.${index}.issue` as const}
         render={({ field }) => (
           <FormItem className="mb-3">
-            <FormLabel>Issue / Title</FormLabel>
+            <FormLabel className="text-foreground dark:text-gray-100">Issue / Title</FormLabel>
             <FormControl>
-              <Input placeholder="Issue title" {...field} />
+              <Input placeholder="Issue title" {...field} className="bg-card dark:bg-gray-700 text-foreground dark:text-gray-100" />
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -128,9 +128,9 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
         name={`issues.${index}.pmun` as const}
         render={({ field }) => (
           <FormItem className="mb-3">
-            <FormLabel>PMUN (Product Master Unique Number)</FormLabel>
+            <FormLabel className="text-foreground dark:text-gray-100">PMUN (Product Master Unique Number)</FormLabel>
             <FormControl>
-              <Input placeholder="PMUN" {...field} />
+              <Input placeholder="PMUN" {...field} className="bg-card dark:bg-gray-700 text-foreground dark:text-gray-100" />
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -143,9 +143,9 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
         name={`issues.${index}.description` as const}
         render={({ field }) => (
           <FormItem className="mb-3">
-            <FormLabel>Description</FormLabel>
+            <FormLabel className="text-foreground dark:text-gray-100">Description</FormLabel>
             <FormControl>
-              <Textarea placeholder="Description" {...field} />
+              <Textarea placeholder="Description" {...field} className="bg-card dark:bg-gray-700 text-foreground dark:text-gray-100" />
             </FormControl>
             <Button
               type="button"
@@ -190,9 +190,9 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
         name={`issues.${index}.actions` as const}
         render={({ field }) => (
           <FormItem className="mb-3">
-            <FormLabel>Actions / Follow-up / Notification No.</FormLabel>
+            <FormLabel className="text-foreground dark:text-gray-100">Actions / Follow-up / Notification No.</FormLabel>
             <FormControl>
-              <Textarea placeholder="Actions, follow-up, notification..." {...field} />
+              <Textarea placeholder="Actions, follow-up, notification..." {...field} className="bg-card dark:bg-gray-700 text-foreground dark:text-gray-100" />
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -205,10 +205,10 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
         name={`issues.${index}.status` as const}
         render={({ field }) => (
           <FormItem className="mb-3">
-            <FormLabel>Status</FormLabel>
+            <FormLabel className="text-foreground dark:text-gray-100">Status</FormLabel>
             <Select onValueChange={field.onChange} defaultValue={field.value}>
               <FormControl>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full bg-card dark:bg-gray-700 text-foreground dark:text-gray-100">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
               </FormControl>
@@ -231,7 +231,7 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
         name={`issues.${index}.notification` as const}
         render={({ field }) => (
           <FormItem className="mb-3">
-            <FormLabel>Notification</FormLabel>
+            <FormLabel className="text-foreground dark:text-gray-100">Notification</FormLabel>
             <FormControl>
               <NotificationToggle
                 checked={field.value}

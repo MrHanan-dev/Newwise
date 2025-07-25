@@ -56,14 +56,14 @@ export function BottomNavigationBar() {
       {/* Toggle button: only one is ever rendered, and never overlaps the bar */}
       {!isBarVisible && (
         <button
-          className="fixed left-1/2 z-50 -translate-x-1/2 bottom-3 bg-card dark:bg-card border border-blue-200 dark:border-border rounded-full shadow-lg p-2 flex items-center justify-center transition-all hover:bg-blue-100/60 dark:hover:bg-blue-900/30"
+          className="fixed left-1/2 z-50 -translate-x-1/2 bottom-3 bg-card dark:bg-gray-800 border border-blue-200 dark:border-border rounded-full shadow-lg p-2 flex items-center justify-center transition-all hover:bg-blue-100/60 dark:hover:bg-blue-900/30"
           style={{ minWidth: 44, minHeight: 44 }}
           onClick={() => setIsBarVisible(true)}
           aria-label="Show navigation bar"
           tabIndex={0}
         >
           {/* Chevron up icon */}
-          <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" /></svg>
+          <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-foreground dark:text-gray-100"><path d="M5 15l7-7 7 7" /></svg>
         </button>
       )}
       <nav
@@ -71,7 +71,7 @@ export function BottomNavigationBar() {
         role="navigation"
         aria-label="Main navigation bar"
       >
-        <div className="w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto bg-card dark:bg-card backdrop-blur-md border-t border-blue-200 dark:border-border rounded-t-3xl shadow-2xl flex justify-around items-center py-2 px-2 sm:px-4 relative">
+        <div className="w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto bg-card dark:bg-gray-900 backdrop-blur-md border-t border-blue-200 dark:border-gray-700 rounded-t-3xl shadow-2xl flex justify-around items-center py-2 px-2 sm:px-4 relative">
           {/* SVG filter for glow */}
           <svg className="absolute inset-0 w-0 h-0 pointer-events-none" aria-hidden="true">
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -87,7 +87,7 @@ export function BottomNavigationBar() {
               key={item.path}
               href={item.path}
               prefetch={true}
-              className={`flex flex-col items-center justify-center gap-0.5 px-2 sm:px-4 py-1 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary ${item.active ? 'text-primary font-bold scale-110' : 'text-muted-foreground hover:text-primary/80'}`}
+              className={`flex flex-col items-center justify-center gap-0.5 px-2 sm:px-4 py-1 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary ${item.active ? 'text-primary font-bold scale-110' : 'text-muted-foreground hover:text-primary/80 dark:text-gray-300 dark:hover:text-blue-400'}`}
               aria-label={item.label}
               tabIndex={0}
               role="button"
@@ -101,14 +101,14 @@ export function BottomNavigationBar() {
       {/* Toggle button when bar is visible */}
       {isBarVisible && (
         <button
-          className="fixed left-1/2 z-50 -translate-x-1/2 bottom-[76px] bg-card dark:bg-card border border-blue-200 dark:border-border rounded-full shadow-lg p-2 flex items-center justify-center transition-all hover:bg-blue-100/60 dark:hover:bg-blue-900/30"
+          className="fixed left-1/2 z-50 -translate-x-1/2 bottom-[76px] bg-card dark:bg-gray-800 border border-blue-200 dark:border-border rounded-full shadow-lg p-2 flex items-center justify-center transition-all hover:bg-blue-100/60 dark:hover:bg-blue-900/30"
           style={{ minWidth: 44, minHeight: 44 }}
           onClick={() => setIsBarVisible(false)}
           aria-label="Hide navigation bar"
           tabIndex={0}
         >
           {/* Chevron down icon */}
-          <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
+          <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-foreground dark:text-gray-100"><path d="M19 9l-7 7-7-7" /></svg>
         </button>
       )}
     </>

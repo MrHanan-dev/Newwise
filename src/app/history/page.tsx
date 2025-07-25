@@ -253,7 +253,7 @@ export default function IssueHistoryPage() {
 
   // ========== Main Render ==========
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
+    <div className="flex flex-col min-h-screen bg-background dark:bg-gray-900 text-foreground dark:text-gray-100">
       {user && <NotificationInitializer />}
       <div className="w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto flex-1 py-4 sm:py-8 px-2 sm:px-4 lg:px-8">
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-2 sm:gap-4">
@@ -262,16 +262,16 @@ export default function IssueHistoryPage() {
           </h1>
         </header>
         {/* Sticky, beautiful filter bar */}
-        <div className="sticky top-0 z-30 w-full bg-background border-b border-border flex flex-wrap gap-2 sm:gap-4 items-center px-2 sm:px-4 py-3 mb-4 rounded-b-2xl">
+        <div className="sticky top-0 z-30 w-full bg-card dark:bg-gray-800 border-b border-border flex flex-wrap gap-2 sm:gap-4 items-center px-2 sm:px-4 py-3 mb-4 rounded-b-2xl">
           <Input
             type="text"
             placeholder="Search issues, PMUN, description, or submitter..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full sm:w-56 md:w-64 lg:w-80 bg-card text-foreground border border-border rounded-xl px-3 py-2"
+            className="w-full sm:w-56 md:w-64 lg:w-80 bg-card dark:bg-gray-700 text-foreground dark:text-gray-100 border border-border rounded-xl px-3 py-2"
           />
           <Select value={statusFilter} onValueChange={v => setStatusFilter(v as string)}>
-            <SelectTrigger className="w-32 bg-card text-foreground border border-border rounded-xl">
+            <SelectTrigger className="w-32 bg-card dark:bg-gray-700 text-foreground dark:text-gray-100 border border-border rounded-xl">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -282,7 +282,7 @@ export default function IssueHistoryPage() {
             </SelectContent>
           </Select>
           <Select value={pmunFilter} onValueChange={v => setPmunFilter(v as string)}>
-            <SelectTrigger className="w-32 bg-card text-foreground border border-border rounded-xl">
+            <SelectTrigger className="w-32 bg-card dark:bg-gray-700 text-foreground dark:text-gray-100 border border-border rounded-xl">
               <SelectValue placeholder="PMUN" />
             </SelectTrigger>
             <SelectContent>
@@ -293,7 +293,7 @@ export default function IssueHistoryPage() {
             </SelectContent>
           </Select>
           <Select value={submittedByFilter} onValueChange={v => setSubmittedByFilter(v as string)}>
-            <SelectTrigger className="w-32 bg-card text-foreground border border-border rounded-xl">
+            <SelectTrigger className="w-32 bg-card dark:bg-gray-700 text-foreground dark:text-gray-100 border border-border rounded-xl">
               <SelectValue placeholder="Submitted By" />
             </SelectTrigger>
             <SelectContent>
@@ -309,17 +309,18 @@ export default function IssueHistoryPage() {
           </div>
           <button
             onClick={resetFilters}
-            className="ml-auto px-4 py-2 rounded-xl bg-muted text-foreground border border-border"
+            className="ml-auto px-4 py-2 rounded-xl bg-muted dark:bg-gray-700 text-foreground dark:text-gray-100 border border-border dark:border-gray-600 disabled:opacity-50"
+            disabled={filteredIssues.length === 0}
           >
             Clear Filters
           </button>
         </div>
         {/* Responsive Issue List: Cards on mobile, table on desktop */}
-        <Card className="rounded-2xl">
-          <CardHeader className="bg-card text-foreground">
+        <Card className="rounded-2xl bg-card dark:bg-gray-800">
+          <CardHeader className="bg-card dark:bg-gray-800 text-foreground dark:text-gray-100">
             <CardTitle className="text-primary">Logged Issues ({enhancedFilteredIssues.length})</CardTitle>
           </CardHeader>
-          <CardContent className="bg-card text-foreground">
+          <CardContent className="bg-card dark:bg-gray-800 text-foreground dark:text-gray-100">
             {enhancedFilteredIssues.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 No issues found matching your criteria.
@@ -371,9 +372,9 @@ export default function IssueHistoryPage() {
                 </div>
                 {/* Table for desktop */}
                 <div className="overflow-x-auto hidden md:block">
-                  <div className="rounded-2xl border border-border bg-card overflow-auto w-full">
-                    <Table className="min-w-full text-foreground text-base md:text-lg">
-                      <TableHeader className="sticky top-0 z-10 bg-card/95">
+                  <div className="rounded-2xl border border-border bg-card dark:bg-gray-800 overflow-auto w-full">
+                    <Table className="min-w-full text-foreground dark:text-gray-100 text-base md:text-lg">
+                      <TableHeader className="sticky top-0 z-10 bg-card/95 dark:bg-gray-800/95">
                         <TableRow>
                           <TableHead onClick={() => handleSort('issue')} className="cursor-pointer font-semibold text-primary text-base md:text-lg px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">Issue Title <SortIndicator field="issue" /></div>
@@ -396,11 +397,11 @@ export default function IssueHistoryPage() {
                           <TableRow
                             key={issue.id}
                             className={
-                              `cursor-pointer ${idx % 2 === 0 ? 'bg-neutral-verylight' : 'bg-card'}`}
+                              `cursor-pointer ${idx % 2 === 0 ? 'bg-card dark:bg-gray-900' : 'bg-card dark:bg-gray-800'} text-foreground dark:text-gray-100`}
                             style={{ borderBottom: '1px solid var(--border)' }}
                             onClick={() => { setSelectedIssue(issue); setDialogOpen(true); }}
                           >
-                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">
+                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground dark:text-gray-100">
                               <div className="flex items-center gap-2">
                                 <NotificationToggle
                                   userId={user.uid}
@@ -410,19 +411,19 @@ export default function IssueHistoryPage() {
                                   size="sm"
                                   onClick={(e) => e.stopPropagation()}
                                 />
-                                <span className="font-medium max-w-xs truncate" title={issue.issue}>{issue.issue}</span>
+                                <span className="font-medium max-w-xs truncate text-foreground dark:text-gray-100" title={issue.issue}>{issue.issue}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">{issue.pmun || '-'}</TableCell>
-                            <TableCell className="text-center px-6 py-4 text-base md:text-lg whitespace-nowrap">
+                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground dark:text-gray-100">{issue.pmun || '-'}</TableCell>
+                            <TableCell className="text-center px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground dark:text-gray-100">
                               {issue.photos && issue.photos.length > 0 ? (
-                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-neutral-verylight text-core-bright font-semibold text-xs md:text-sm border border-border">
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-neutral-verylight dark:bg-gray-700 text-core-bright font-semibold text-xs md:text-sm border border-border">
                                   <Paperclip className="h-4 w-4 text-core-bright" />
                                   {issue.photos.length}
                                   <span className="sr-only">attachments</span>
                                 </span>
                               ) : (
-                                <span className="inline-block px-3 py-1 rounded-full bg-neutral-light text-neutral-medium font-medium text-xs md:text-sm border border-border">-</span>
+                                <span className="inline-block px-3 py-1 rounded-full bg-neutral-light dark:bg-gray-700 text-neutral-medium dark:text-gray-300 font-medium text-xs md:text-sm border border-border">-</span>
                               )}
                             </TableCell>
                             <TableCell className={
@@ -431,12 +432,12 @@ export default function IssueHistoryPage() {
                                 issue.status === 'In Progress' ? 'bg-yellow-400 text-black' :
                                 issue.status === 'Completed' ? 'bg-blue-500 text-white' :
                                 issue.status === 'Escalated' ? 'bg-red-600 text-white' :
-                                'bg-gray-200 text-gray-700')
+                                'bg-gray-700 text-gray-100')
                             } style={{ minWidth: '110px' }}>
                               {issue.status}
                             </TableCell>
-                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">{userNameMap[issue.submittedBy] || issue.submittedBy}</TableCell>
-                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">{(() => { const d = getValidDate(issue.reportDate); return d ? format(d, 'PPp') : 'Invalid date'; })()}</TableCell>
+                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground dark:text-gray-100">{userNameMap[issue.submittedBy] || issue.submittedBy}</TableCell>
+                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground dark:text-gray-100">{(() => { const d = getValidDate(issue.reportDate); return d ? format(d, 'PPp') : 'Invalid date'; })()}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

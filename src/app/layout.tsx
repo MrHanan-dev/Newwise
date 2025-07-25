@@ -59,12 +59,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="apple-touch-icon" sizes="180x180" href="/icon-192x192.png" />
       </head>
-      <body
-        className={cn(
-          "font-body antialiased min-h-screen bg-background text-foreground",
-          "font-body"
-        )}
-      >
+      <body className="min-h-screen bg-background text-foreground dark:bg-gray-900 dark:text-gray-100">
         <KeyboardShortcutsProvider>
           <AnimatedBackground />
           <DarkModeProvider>

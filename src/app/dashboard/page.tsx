@@ -319,7 +319,7 @@ export default function DashboardPage() {
       {/* Onboarding Tour Modal (UI only for now) */}
       {showTour && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-card rounded-2xl shadow border border-border p-8 max-w-md w-full flex flex-col items-center">
+          <div className="bg-card dark:bg-gray-900 rounded-2xl shadow border border-border dark:border-gray-700 p-8 max-w-md w-full flex flex-col items-center">
             <h2 className="text-2xl font-bold mb-2 text-primary">Welcome to ShiftWise!</h2>
             <p className="mb-4 text-foreground text-center">This quick tour will show you how to log issues, view reports, and use all the features of your dashboard.</p>
             <ul className="mb-4 text-left text-foreground list-disc pl-6">
@@ -341,7 +341,7 @@ export default function DashboardPage() {
       {/* Take a Tour button */}
       <div className="flex justify-end mb-2">
         <button
-          className="px-4 py-2 rounded-lg bg-muted text-foreground border border-border shadow text-sm font-semibold"
+          className="px-4 py-2 rounded-lg bg-muted dark:bg-gray-700 text-foreground dark:text-gray-100 border border-border dark:border-gray-600 shadow text-sm font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           onClick={() => setShowTour(true)}
         >
           🎉 Take a Tour
@@ -374,12 +374,12 @@ export default function DashboardPage() {
       {userProfile?.role === 'operator' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Issues I’ve logged */}
-          <div className="bg-card rounded-xl shadow-md p-4 border border-border">
+          <div className="bg-card dark:bg-gray-800 rounded-xl shadow-md p-4 border border-border dark:border-gray-700">
             <h3 className="text-lg font-semibold mb-2">Issues I’ve Logged</h3>
             <div className="text-4xl font-bold text-core-bright">{myIssues?.length ?? 0}</div>
           </div>
           {/* All open issues */}
-          <div className="bg-card rounded-xl shadow-md p-4 border border-border">
+          <div className="bg-card dark:bg-gray-800 rounded-xl shadow-md p-4 border border-border dark:border-gray-700">
             <h3 className="text-lg font-semibold mb-2">All Open Issues</h3>
             <div className="text-4xl font-bold text-secondary-orange">{issues.filter(i => i.status === 'Open').length}</div>
           </div>
@@ -389,7 +389,7 @@ export default function DashboardPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="px-6 py-3 rounded-xl bg-core-bright text-core-white font-bold shadow"
+                    className="px-6 py-3 rounded-xl bg-core-bright dark:bg-blue-600 text-core-white font-bold shadow hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors"
                     onClick={() => {
                       toast({ title: 'Navigating to Log Issue', description: 'Shortcut: L' });
                       router.push('/');
@@ -406,12 +406,12 @@ export default function DashboardPage() {
       ) : userProfile?.role === 'technician' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Issues assigned to me */}
-          <div className="bg-card rounded-xl shadow-md p-4 border border-border">
+          <div className="bg-card dark:bg-gray-800 rounded-xl shadow-md p-4 border border-border dark:border-gray-700">
             <h3 className="text-lg font-semibold mb-2">Issues Assigned to Me</h3>
             <div className="text-4xl font-bold text-secondary-green">{assignedIssues?.length ?? 0}</div>
           </div>
           {/* Issues in progress */}
-          <div className="bg-card rounded-xl shadow-md p-4 border border-border">
+          <div className="bg-card dark:bg-gray-800 rounded-xl shadow-md p-4 border border-border dark:border-gray-700">
             <h3 className="text-lg font-semibold mb-2">Issues In Progress</h3>
             <div className="text-4xl font-bold text-secondary-yellow">{inProgressIssues?.length ?? 0}</div>
           </div>
@@ -451,7 +451,7 @@ export default function DashboardPage() {
             role="button"
           >
             <CardHeader className="pb-2 flex flex-col items-center justify-center">
-              <CardTitle className="text-sm xs:text-base md:text-lg font-semibold text-primary text-center break-words whitespace-normal w-full flex flex-col items-center">
+              <CardTitle className="text-sm xs:text-base md:text-lg font-semibold text-primary dark:text-gray-100 text-center break-words whitespace-normal w-full flex flex-col items-center">
                 <span className="break-words whitespace-normal w-full">{status}</span>
                 <span className={`mt-1 text-xs xs:text-sm md:text-base font-medium flex items-center text-center break-words whitespace-normal ${statusPercentages[status]?.percent >= 0 ? 'text-secondary-green' : 'text-destructive'}`}> 
                   {statusPercentages[status]?.percent >= 0 ? '↑' : '↓'}
@@ -460,7 +460,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col items-center justify-center">
-              <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground text-center break-words whitespace-normal w-full">{statusCounts[status] || 0}</span>
+              <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground dark:text-gray-100 text-center break-words whitespace-normal w-full">{statusCounts[status] || 0}</span>
             </CardContent>
           </Card>
         ))}
@@ -474,7 +474,7 @@ export default function DashboardPage() {
           role="button"
         >
           <CardHeader className="pb-2 flex flex-col items-center justify-center">
-            <CardTitle className="text-sm xs:text-base md:text-lg font-semibold text-primary text-center break-words whitespace-normal w-full flex flex-col items-center">
+            <CardTitle className="text-sm xs:text-base md:text-lg font-semibold text-primary dark:text-gray-100 text-center break-words whitespace-normal w-full flex flex-col items-center">
               <span className="break-words whitespace-normal w-full">Total</span>
               <span className={`mt-1 text-xs xs:text-sm md:text-base font-medium flex items-center text-center break-words whitespace-normal ${statusPercentages["Total"]?.percent >= 0 ? 'text-secondary-green' : 'text-destructive'}`}> 
                 {statusPercentages["Total"]?.percent >= 0 ? '↑' : '↓'}
@@ -483,7 +483,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col items-center justify-center">
-            <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground text-center break-words whitespace-normal w-full">{issues.length}</span>
+            <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground dark:text-gray-100 text-center break-words whitespace-normal w-full">{issues.length}</span>
           </CardContent>
         </Card>
         </div>
@@ -494,7 +494,7 @@ export default function DashboardPage() {
         <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 order-2 md:order-none">
           {/* Issues by Status Bar Chart */}
           <div className="bg-card rounded-3xl shadow-md p-6 border border-border relative overflow-hidden">
-            <h3 className="text-xl font-extrabold mb-4 text-primary tracking-tight z-10 relative">Issues by Status</h3>
+            <h3 className="text-xl font-extrabold mb-4 text-primary dark:text-gray-100 tracking-tight z-10 relative">Issues by Status</h3>
             <ChartContainer config={{}}>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={chartData} barCategoryGap="20%">
@@ -515,7 +515,7 @@ export default function DashboardPage() {
           </div>
           {/* Issues by Day Bar Chart */}
           <div className="bg-card rounded-3xl shadow-md p-6 border border-border relative overflow-hidden">
-            <h3 className="text-xl font-extrabold mb-4 text-secondary-green tracking-tight z-10 relative">Issues Created (Last 7 Days)</h3>
+            <h3 className="text-xl font-extrabold mb-4 text-secondary-green dark:text-green-300 tracking-tight z-10 relative">Issues Created (Last 7 Days)</h3>
             <ChartContainer config={{}}>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={issuesByDay} barCategoryGap="20%">
@@ -537,7 +537,7 @@ export default function DashboardPage() {
         </div>
       )}
       {/* Filter Bar (removed status dropdown) */}
-      <div className="flex flex-wrap gap-4 mb-6 items-center bg-background">
+      <div className="flex flex-wrap gap-4 mb-6 items-center bg-transparent">
         <EmailDailyReport />
       </div>
       {/* Recent Issues List */}
@@ -547,7 +547,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="bg-card text-foreground">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-foreground text-base md:text-lg">
+            <table className="min-w-full text-foreground dark:text-gray-100 text-base md:text-lg">
               <thead>
                 <tr>
                   <th className="px-4 py-2 text-left">Status</th>
@@ -560,7 +560,7 @@ export default function DashboardPage() {
                 {filteredIssues.map((issue, idx) => (
                   <tr
                     key={issue.id || idx}
-                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-foreground dark:text-gray-100"
                     onClick={async () => {
                       const latest = await fetchLatestIssue(issue);
                       setSelectedIssue(latest);
@@ -569,17 +569,17 @@ export default function DashboardPage() {
                   >
                     <td className="px-4 py-2 text-left">
                       <span className={
-                        issue.status === 'Completed' ? 'text-green-600 font-semibold' :
-                        issue.status === 'In Progress' ? 'text-yellow-600 font-semibold' :
-                        issue.status === 'Open' ? 'text-blue-600 font-semibold' :
-                        'text-gray-600 font-semibold'
+                        issue.status === 'Completed' ? 'font-semibold text-blue-500 dark:text-blue-400' :
+                        issue.status === 'In Progress' ? 'font-semibold text-yellow-600 dark:text-yellow-300' :
+                        issue.status === 'Open' ? 'font-semibold text-green-600 dark:text-green-400' :
+                        'font-semibold text-gray-600 dark:text-gray-300'
                       }>
                         {issue.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-left max-w-xs truncate" title={issue.issue}>{issue.issue}</td>
-                    <td className="px-4 py-2 text-left max-w-xs truncate" title={userNameMap[issue.submittedBy] || issue.submittedBy}>{userNameMap[issue.submittedBy] || issue.submittedBy}</td>
-                    <td className="px-4 py-2 text-left">{issue.reportDate && (issue.reportDate.seconds ? new Date(issue.reportDate.seconds * 1000).toLocaleDateString() : new Date(issue.reportDate).toLocaleDateString())}</td>
+                    <td className="px-4 py-2 text-left max-w-xs truncate text-foreground dark:text-gray-100" title={issue.issue}>{issue.issue}</td>
+                    <td className="px-4 py-2 text-left max-w-xs truncate text-foreground dark:text-gray-100" title={userNameMap[issue.submittedBy] || issue.submittedBy}>{userNameMap[issue.submittedBy] || issue.submittedBy}</td>
+                    <td className="px-4 py-2 text-left text-foreground dark:text-gray-100">{issue.reportDate && (issue.reportDate.seconds ? new Date(issue.reportDate.seconds * 1000).toLocaleDateString() : new Date(issue.reportDate).toLocaleDateString())}</td>
                   </tr>
                 ))}
               </tbody>

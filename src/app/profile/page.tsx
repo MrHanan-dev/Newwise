@@ -47,21 +47,21 @@ export default function ProfilePage() {
   if (profileLoading) return <div className="p-8 text-center">Loading...</div>;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] py-8 px-2 w-full bg-background text-foreground">
+    <div className="flex flex-col items-center justify-center min-h-[60vh] py-8 px-2 w-full bg-background dark:bg-gray-900 text-foreground dark:text-gray-100">
       {/* Show user role at the top */}
       {profile && (
-        <div className="mb-4 px-4 py-2 rounded-lg font-semibold text-primary bg-card shadow border border-border">
+        <div className="mb-4 px-4 py-2 rounded-lg font-semibold text-primary bg-card dark:bg-gray-800 shadow border border-border dark:border-gray-700">
           You are logged in as <span>{profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}</span>
         </div>
       )}
-      <Card className="w-full max-w-xs sm:max-w-md md:max-w-lg bg-gradient-to-br from-white via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 text-card-foreground shadow-2xl border-2 border-blue-100 dark:border-blue-900 rounded-3xl p-0">
+      <Card className="w-full max-w-xs sm:max-w-md md:max-w-lg bg-card dark:bg-gray-800 text-card-foreground dark:text-gray-100 shadow-2xl border-2 border-blue-100 dark:border-gray-700 rounded-3xl p-0">
         <CardHeader className="flex flex-col items-center gap-2 pt-8 pb-4">
           {/* Avatar with initials */}
-          <div className="w-20 h-20 rounded-full bg-blue-200 dark:bg-blue-900 flex items-center justify-center shadow-lg border-4 border-white dark:border-gray-900 mb-2">
+          <div className="w-20 h-20 rounded-full bg-blue-200 dark:bg-gray-700 flex items-center justify-center shadow-lg border-4 border-white dark:border-gray-900 mb-2">
             {profile?.name ? (
               <span className="text-3xl font-bold text-blue-700 dark:text-blue-200">{getInitials(profile.name)}</span>
             ) : (
-              <UserCircle className="w-16 h-16 text-blue-400 dark:text-blue-700" />
+              <UserCircle className="w-16 h-16 text-blue-400 dark:text-blue-200" />
             )}
           </div>
           <CardTitle className="text-2xl font-bold text-primary mb-1">Profile</CardTitle>
@@ -71,7 +71,7 @@ export default function ProfilePage() {
         <CardContent className="pt-6 pb-8 px-6">
           <form onSubmit={handleSave} className="flex flex-col gap-4">
             <div>
-              <label className="text-sm font-medium text-foreground" htmlFor="name">Name</label>
+              <label className="text-sm font-medium text-foreground dark:text-gray-100" htmlFor="name">Name</label>
               <Input
                 id="name"
                 name="name"
@@ -79,40 +79,40 @@ export default function ProfilePage() {
                 value={form.name}
                 readOnly
                 required
-                className="mt-1 bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
+                className="mt-1 bg-gray-100 dark:bg-gray-700 text-foreground dark:text-gray-100 cursor-not-allowed"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground" htmlFor="company">Company</label>
+              <label className="text-sm font-medium text-foreground dark:text-gray-100" htmlFor="company">Company</label>
               <Input
                 id="company"
                 name="company"
                 placeholder="Company Name"
                 value={form.company}
                 onChange={handleChange}
-                className="mt-1"
+                className="mt-1 bg-card dark:bg-gray-700 text-foreground dark:text-gray-100"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground" htmlFor="category">Category</label>
+              <label className="text-sm font-medium text-foreground dark:text-gray-100" htmlFor="category">Category</label>
               <Input
                 id="category"
                 name="category"
                 placeholder="Category"
                 value={form.category}
                 onChange={handleChange}
-                className="mt-1"
+                className="mt-1 bg-card dark:bg-gray-700 text-foreground dark:text-gray-100"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground" htmlFor="role">Role</label>
+              <label className="text-sm font-medium text-foreground dark:text-gray-100" htmlFor="role">Role</label>
               <Input
                 id="role"
                 name="role"
                 placeholder="Role"
                 value={form.role}
                 disabled
-                className="mt-1 bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
+                className="mt-1 bg-gray-100 dark:bg-gray-700 text-foreground dark:text-gray-100 cursor-not-allowed"
               />
             </div>
             <hr className="border-t border-blue-100 dark:border-blue-900 my-2" />

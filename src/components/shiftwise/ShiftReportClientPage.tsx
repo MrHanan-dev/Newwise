@@ -316,16 +316,19 @@ export default function ShiftReportClientPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground relative overflow-hidden" style={{ backgroundImage: 'url(/bg-professional.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
-      <main className="flex-1 container mx-auto p-2 sm:p-4 md:p-8 max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl">
+    <div className="flex flex-col items-center justify-center min-h-[60vh] py-8 px-2 w-full bg-background text-foreground dark:bg-gray-900 dark:text-gray-100">
+      <div className="mb-4 px-4 py-2 rounded-lg font-semibold text-primary bg-card shadow border border-border dark:bg-gray-800 dark:border-gray-700">
+        {user?.email}
+      </div>
+      <div className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-blue-100 dark:border-gray-700 p-6">
         <FormProvider {...form}>
           <div
-            className="relative w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto min-h-screen flex flex-col items-center justify-start bg-card text-card-foreground rounded-3xl shadow-2xl p-2 sm:p-4 md:p-8 gap-4 sm:gap-8 border border-border mt-4 sm:mt-8"
+            className="relative w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto min-h-screen flex flex-col items-center justify-start bg-card dark:bg-gray-900 text-card-foreground dark:text-gray-100 rounded-3xl shadow-2xl p-2 sm:p-4 md:p-8 gap-4 sm:gap-8 border border-border dark:border-gray-700 mt-4 sm:mt-8"
             style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
           >
             {/* Professional, static ShiftWise header */}
             <header
-              className="sticky top-0 z-30 w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-0 sm:px-2 pt-6 pb-4 bg-neutral-verylight rounded-b-3xl shadow-2xl border-b border-border flex flex-col items-center"
+              className="sticky top-0 z-30 w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-0 sm:px-2 pt-6 pb-4 bg-card dark:bg-gray-800 rounded-b-3xl shadow-2xl border-b border-border flex flex-col items-center"
               style={{
                 boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.13)',
                 borderBottomLeftRadius: '2.5rem',
@@ -336,32 +339,32 @@ export default function ShiftReportClientPage() {
               }}
             >
               <div className="relative z-10 w-full flex flex-col sm:flex-row justify-between items-center gap-2 px-2 sm:px-6">
-                <span className="text-core-corporate font-bold text-lg sm:text-xl md:text-2xl tracking-wide select-all" style={{letterSpacing: '0.01em'}}>
+                <span className="text-core-corporate font-bold text-lg sm:text-xl md:text-2xl tracking-wide select-all text-foreground dark:text-gray-100" style={{letterSpacing: '0.01em'}}>
                   {user?.email}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="text-core-corporate font-bold text-base sm:text-lg md:text-xl px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-core-corporate"
+                  className="text-core-corporate font-bold text-base sm:text-lg md:text-xl px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-core-corporate text-foreground dark:text-gray-100"
                   style={{letterSpacing: '0.02em'}}>
                   Log Out
                 </button>
               </div>
               <div className="relative z-10 flex flex-col items-center mt-2 mb-1 w-full">
                 <h1
-                  className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-core-corporate text-center tracking-tight"
+                  className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-core-corporate text-center tracking-tight text-foreground dark:text-gray-100"
                   style={{letterSpacing: '-0.03em'}}>
                   ShiftWise
                 </h1>
-                <span className="text-2xl sm:text-3xl md:text-4xl font-semibold text-core-corporate tracking-wide mt-1" style={{letterSpacing: '0.01em'}}>
+                <span className="text-2xl sm:text-3xl md:text-4xl font-semibold text-core-corporate tracking-wide mt-1 text-foreground dark:text-gray-100" style={{letterSpacing: '0.01em'}}>
                   Shift Report
                 </span>
               </div>
             </header>
 
-            <div className="w-full max-w-2xl mx-auto mt-4 mb-8 p-4 bg-white rounded-2xl shadow-lg pb-32"> {/* Add pb-32 for bottom padding */}
+            <div className="w-full max-w-2xl mx-auto mt-4 mb-8 p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-lg pb-32"> {/* Add pb-32 for bottom padding */}
               <form id="shift-report-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full px-2 pt-2 flex flex-col items-center">
                 {/* ========== TOP SECTION: REPORT HEADER ========== */}
-                <div className="w-full rounded-2xl bg-card dark:bg-card shadow-md p-2 sm:p-6 md:p-8 mb-4 sm:mb-6 flex flex-col gap-4 sm:gap-6">
+                <div className="w-full rounded-2xl bg-card dark:bg-gray-800 shadow-md p-2 sm:p-6 md:p-8 mb-4 sm:mb-6 flex flex-col gap-4 sm:gap-6">
                   <div className="flex flex-col md:flex-row gap-2 items-center justify-between">
                     <FormField
                       control={form.control}
@@ -373,7 +376,7 @@ export default function ShiftReportClientPage() {
                             Your Name
                           </FormLabel>
                           <FormControl>
-                            <div className="rounded-xl h-12 text-lg px-4 bg-input dark:bg-input text-foreground dark:text-foreground border-blue-200 flex items-center min-h-[3rem]">
+                            <div className="rounded-xl h-12 text-lg px-4 bg-input dark:bg-gray-700 text-foreground dark:text-gray-100 border-blue-200 flex items-center min-h-[3rem]">
                               {profileLoading ? "Loading..." : profileError ? profileError : profileName}
                             </div>
                           </FormControl>
@@ -396,9 +399,9 @@ export default function ShiftReportClientPage() {
                               <PopoverTrigger asChild>
                                 <FormControl>
                                   <Button
-                                    variant={"outline"}
+                                    variant={field.value ? "outline" : "default"}
                                     className={cn(
-                                      "rounded-xl h-12 w-full justify-start text-left font-normal bg-input dark:bg-input border-blue-200 text-lg text-foreground dark:text-foreground",
+                                      "rounded-xl h-12 w-full justify-start text-left font-normal bg-card dark:bg-gray-700 text-lg text-foreground dark:text-gray-100 border-blue-200",
                                       !field.value && "text-muted-foreground"
                                     )}
                                   >
@@ -473,7 +476,7 @@ export default function ShiftReportClientPage() {
             </div>
           </div>
         </FormProvider>
-        </main>
+      </div>
     </div>
   );
 }

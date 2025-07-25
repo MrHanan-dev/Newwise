@@ -21,6 +21,11 @@ input, textarea, select {
   border: 2px solid #00B6F0;
   color: #1b2536;
 }
+.dark input, .dark textarea, .dark select {
+  background: #23304a;
+  color: #F5F5F5;
+  border: 2px solid #333333;
+}
 input:focus, textarea:focus, select:focus {
   border: 2px solid #F96EB6;
 }
@@ -33,10 +38,10 @@ input:focus, textarea:focus, select:focus {
 .card, .bg-card, .rounded-2xl, .rounded-3xl {
   box-shadow: 0 4px 24px 0 rgba(31,38,135,0.07), 0 1.5px 6px 0 rgba(31,38,135,0.04);
   border-radius: 1.2rem;
-  background: #FFFFFF;
+  background: var(--card);
 }
 .dark .card, .dark .bg-card, .dark .rounded-2xl, .dark .rounded-3xl {
-  background: #23304a;
+  background: var(--card);
   box-shadow: 0 4px 24px 0 #0056A622, 0 1.5px 6px 0 #0056A611;
 }
 

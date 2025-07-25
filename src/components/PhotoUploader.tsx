@@ -79,13 +79,13 @@ const PhotoUploader = forwardRef(function PhotoUploader(
         accept="image/*"
         multiple
         onChange={handleFileChange}
-        className="file:mr-2 file:px-3 file:py-1 file:bg-core-bright file:text-core-white file:rounded-lg border border-neutral-light focus:ring-2 focus:ring-core-corporate focus:ring-offset-2"
+        className="file:mr-2 file:px-3 file:py-1 file:bg-core-bright file:text-core-white file:rounded-lg border border-neutral-light dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-core-corporate focus:ring-offset-2"
       />
       <button
         type="button"
         onClick={handleUpload}
         disabled={uploading || !files.length}
-        className="px-4 py-2 bg-core-bright text-core-white font-semibold rounded-xl border border-core-bright focus:outline-none focus:ring-2 focus:ring-core-corporate focus:ring-offset-2 disabled:opacity-50"
+        className="px-4 py-2 bg-core-bright dark:bg-blue-700 text-core-white font-semibold rounded-xl border border-core-bright dark:border-blue-700 focus:outline-none focus:ring-2 focus:ring-core-corporate focus:ring-offset-2 disabled:opacity-50"
       >
         {uploading ? (
           <span className="flex items-center gap-2">
