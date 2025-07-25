@@ -270,7 +270,7 @@ export default function ShiftReportClientPage() {
 
       // Add the new report to the "shiftReports" collection
       await addDoc(collection(db, "shiftReports"), reportData);
-      mutate(['issues', user]);
+      mutate(['issues', user?.uid]);
       toast({
         title: "Report Submitted!",
         description: "Your shift report has been successfully recorded.",

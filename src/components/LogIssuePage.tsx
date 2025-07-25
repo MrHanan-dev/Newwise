@@ -266,7 +266,7 @@ const LogIssuePage = () => {
       }
     });
     setAllIssues(issues);
-    mutate(['issues', user]);
+    mutate(['issues', user?.uid]);
   };
 
   const handleLogout = async () => {
