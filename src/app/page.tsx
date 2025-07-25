@@ -11,12 +11,12 @@ function DarkModeToggle() {
   return (
     <button
       onClick={toggleDarkMode}
-      className="flex items-center justify-center w-10 h-10 rounded-full bg-muted hover:bg-accent transition-colors border border-border focus:outline-none focus:ring-2 focus:ring-primary ml-2"
+      className="flex items-center justify-center w-10 h-10 rounded-full bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary ml-2"
       aria-label="Toggle dark mode"
       title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
       style={{ position: 'absolute', top: 18, right: 18, zIndex: 40 }}
     >
-      {darkMode ? <Moon className="h-6 w-6 text-blue-400" /> : <Sun className="h-6 w-6 text-yellow-400" />}
+      {darkMode ? <Moon className="h-6 w-6 text-primary" /> : <Sun className="h-6 w-6 text-secondary-yellow" />}
     </button>
   );
 }

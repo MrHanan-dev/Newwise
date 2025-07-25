@@ -37,7 +37,23 @@ import { format } from "date-fns"; // Date formatting
 import { cn } from "@/lib/utils"; // Utility for class name merging
 import { NotificationToggle } from "@/components/ui/notification-toggle"; // Notification toggle component
 import { useAuth } from "@/context/AuthContext";
+import { useUserProfileContext } from "@/context/UserProfileContext";
 // Remove Tabs, TabsList, TabsTrigger, TabsContent imports
+
+// Add a helper to robustly convert Firestore Timestamp, string, or Date to JS Date
+function toDateSafe(val: any): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val === 'string' || typeof val === 'number') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (val.seconds && typeof val.seconds === 'number') {
+    // Firestore Timestamp
+    return new Date(val.seconds * 1000);
+  }
+  return null;
+}
 
 // ===== Props for the dialog =====
 interface IssueDetailDialogProps {
@@ -54,12 +70,17 @@ interface IssueDetailDialogProps {
 // ===============================
 export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, userRole }: IssueDetailDialogProps) {
   const { user } = useAuth();
+  const { profile: userProfile } = useUserProfileContext();
   // editMode: Whether the dialog is in edit mode
   // formState: Local state for editing fields
   const [editMode, setEditMode] = useState(false);
   const [formState, setFormState] = useState<IssueBlockFormValues | null>(null);
   // Separate state for the report date since it's not part of IssueBlockFormValues
   const [reportDate, setReportDate] = useState<Date | null>(null);
+  // Track comment for status change
+  const [statusChangeComment, setStatusChangeComment] = useState("");
+  const [statusChanged, setStatusChanged] = useState(false);
+  const [saveError, setSaveError] = useState("");
   // Remove activeTab, comments, newComment state
   
   // ========== Load issue data into local state when opened ==========
@@ -72,9 +93,12 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
         actions: issue.actions ?? "",
         status: issue.status,
         photos: issue.photos ?? [],
+        history: issue.history ?? [],
       });
-      // Set the report date separately
       setReportDate(issue.reportDate);
+      setStatusChangeComment("");
+      setStatusChanged(false);
+      setSaveError("");
     }
   }, [issue]);
 
@@ -85,12 +109,35 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
 
   // ========== Handle field changes in edit mode ==========
   const handleChange = (field: keyof IssueBlockFormValues, value: any) => {
-    setFormState((prev) => ({ ...(prev as IssueBlockFormValues), [field]: value }));
+    setFormState((prev) => {
+      const updated = { ...(prev as IssueBlockFormValues), [field]: value };
+      if (field === "status" && issue) {
+        setStatusChanged(value !== issue.status);
+        if (value !== issue.status) {
+          setSaveError("");
+        }
+      }
+      return updated;
+    });
   };  // ========== Save changes to Firestore ==========
   // This updates the entire issues array in the parent shift report
   const saveChanges = async () => {
+    setSaveError("");
     if (!formState || !reportDate) return;
-    
+    // Validate reportDate is a valid date and not in the future
+    if (!(reportDate instanceof Date) || isNaN(reportDate.getTime())) {
+      setSaveError("Please select a valid report date.");
+      return;
+    }
+    if (reportDate > new Date()) {
+      setSaveError("Report date cannot be in the future.");
+      return;
+    }
+    // Require comment if status changed
+    if (issue && formState.status !== issue.status && !statusChangeComment.trim()) {
+      setSaveError("Please provide a comment explaining the status change.");
+      return;
+    }
     // Determine what has changed
     const changes = [];
     if (issue.issue !== formState.issue) changes.push("title");
@@ -107,6 +154,18 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
     const reportData = reportSnap.data();
     if (!Array.isArray(reportData.issues)) return;
     
+    // Add a new history entry for this change
+    const prevHistory = Array.isArray(formState.history) ? formState.history : [];
+    const userName = userProfile?.name || user?.displayName || user?.email || user?.uid || 'Unknown';
+    const newHistoryEntry = {
+      status: formState.status,
+      changedBy: userName,
+      changedAt: new Date(),
+      role: userProfile?.role || userRole,
+      ...(issue && formState.status !== issue.status && statusChangeComment.trim() ? { note: statusChangeComment.trim() } : {})
+    };
+    const updatedHistory = [...prevHistory, newHistoryEntry];
+
     // Update the relevant issue in the array, preserving existing fields
     const updatedIssues = [...reportData.issues];
     const existingIssue = reportData.issues[issue.issueIndex];
@@ -114,6 +173,7 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
     updatedIssues[issue.issueIndex] = {
       ...existingIssue, // Preserve all existing fields
       ...formState, // Overwrite with edited fields
+      history: updatedHistory,
       subscribers: existingIssue.subscribers || [], // Ensure subscribers array is preserved
     };
     
@@ -125,16 +185,29 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
       issues: updatedIssues,
       reportDate: reportTimestamp
     });
-    
-    // Call the callback to update local state in parent
-    if (onIssueUpdated) {
-      onIssueUpdated({ 
-        ...issue, 
-        ...formState,
-        reportDate: reportDate
-      });
+
+    // Fetch the latest issue data from Firestore to ensure up-to-date timeline
+    const refreshedSnap = await getDoc(reportRef);
+    let refreshedIssue = null;
+    if (refreshedSnap.exists()) {
+      const refreshedData = refreshedSnap.data();
+      if (Array.isArray(refreshedData.issues) && refreshedData.issues[issue.issueIndex]) {
+        refreshedIssue = {
+          ...refreshedData.issues[issue.issueIndex],
+          reportId: issue.reportId,
+          issueIndex: issue.issueIndex,
+          id: issue.id,
+          reportDate: refreshedData.reportDate,
+          submittedBy: refreshedData.submittedBy,
+        };
+      }
     }
-    
+
+    // Call the callback to update local state in parent
+    if (onIssueUpdated && refreshedIssue) {
+      onIssueUpdated(refreshedIssue);
+    }
+
     // Send notification if changes were made
     if (changes.length > 0) {
       try {
@@ -167,8 +240,12 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setEditMode(false); onOpenChange(o); }}>
-      <DialogContent className="w-full max-w-xs sm:max-w-lg md:max-w-2xl bg-gradient-to-br from-white via-blue-50 to-green-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl border-2 border-blue-200 dark:border-blue-900 p-2 sm:p-6 max-h-[80vh] overflow-y-auto">
+    <Dialog key={issue?.id} open={open} onOpenChange={(o) => {
+      if (!o) setEditMode(false); // Only reset editMode when closing
+      onOpenChange(o);
+    }}>
+      <DialogContent className="h-screen max-h-screen w-full max-w-full flex flex-col overflow-y-auto bg-gradient-to-br from-white via-blue-50 to-green-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl border-2 border-blue-200 dark:border-blue-900 p-2 sm:p-4 md:p-6 cursor-default text-sm">
+        <DialogTitle className="text-2xl font-bold mb-4 text-blue-700 dark:text-blue-200">{issue?.issue || 'Issue Details'}</DialogTitle>
         {/* Only render the details UI as before, no tabs or comments */}
         {editMode ? (
           <div className="space-y-4">
@@ -177,32 +254,32 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
               onChange={(e) => handleChange("issue", e.target.value)}
               placeholder="Issue title"
               className="rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400"
-              disabled={userRole === 'operator'} // Disable editing for operator
+              // Always editable in edit mode
             />
             <Input
               value={formState.pmun ?? ""}
               onChange={(e) => handleChange("pmun", e.target.value)}
               placeholder="PMUN"
               className="rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400"
-              disabled={userRole === 'operator'}
+              // Always editable in edit mode
             />
             <Textarea
               value={formState.description}
               onChange={(e) => handleChange("description", e.target.value)}
               placeholder="Description"
               className="rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400 min-h-[100px]"
-              disabled={userRole === 'operator'}
+              // Always editable in edit mode
             />
             <Textarea
               value={formState.actions ?? ""}
               onChange={(e) => handleChange("actions", e.target.value)}
               placeholder="Actions"
               className="rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400 min-h-[80px]"
-              disabled={userRole === 'operator'}
+              // Always editable in edit mode
             />            <Select
               value={formState.status}
               onValueChange={(val) => handleChange("status", val as StatusOption)}
-              disabled={userRole === 'operator'}
+              // Always editable in edit mode
             >
               <SelectTrigger className="rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400">
                 <SelectValue placeholder="Status" />
@@ -215,6 +292,21 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
                 ))}            </SelectContent>
             </Select>
             
+            {/* Show comment input if status changed */}
+            {statusChanged && (
+              <div>
+                <label className="block text-sm font-medium text-blue-700 dark:text-blue-200 mb-1">Comment for status change <span className="text-red-500">*</span></label>
+                <Textarea
+                  value={statusChangeComment}
+                  onChange={e => setStatusChangeComment(e.target.value)}
+                  placeholder="Please explain why you are changing the status."
+                  className="rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400 min-h-[60px]"
+                  required
+                />
+                {saveError && <div className="text-red-600 text-xs mt-1">{saveError}</div>}
+              </div>
+            )}
+            {/* Remove any Input for report date in edit mode. Only keep the Popover/Button/Calendar for date selection. */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-blue-700 dark:text-blue-200">Report Date</label>
               <Popover>
@@ -222,15 +314,17 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
                   <Button
                     variant={"outline"}
                     className={cn(
-                      "w-full rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400 justify-start text-left font-normal",
-                      !reportDate && "text-muted-foreground"
+                      "w-full rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400 justify-start text-left font-normal text-blue-700 dark:text-blue-200",
+                      // Remove text-muted-foreground
                     )}
+                    // Ensure the button is always enabled in edit mode
                   >
                     <CalendarIcon className="h-4 w-4 mr-2" />
                     {reportDate ? format(reportDate, "PPP") : <span>Select date</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">                  <Calendar
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
                     mode="single"
                     selected={reportDate as Date}
                     onSelect={(date) => {
@@ -241,34 +335,7 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
                 </PopoverContent>
               </Popover>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Report Date
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left rounded-lg border-blue-300",
-                      !reportDate && "text-gray-400"
-                    )}
-                  >
-                    {reportDate ? format(reportDate, "PPP") : "Select a date"}
-                    <CalendarIcon className="w-5 h-5 ml-auto text-blue-500" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-4">                  <Calendar
-                    mode="single"
-                    selected={reportDate || undefined}
-                    onSelect={(date) => {
-                      setReportDate(date || null);
-                    }}
-                    className="w-full"
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>            {formState.photos && formState.photos.length > 0 && (
+            {formState.photos && formState.photos.length > 0 && (
               <div>
                 <h3 className="font-semibold mb-2 text-blue-700 dark:text-blue-200">Attachments</h3>
                 <div className="flex flex-wrap gap-1 sm:gap-2">
@@ -295,12 +362,12 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
                   />}
                 </div>
               </div>
-            </div><DialogFooter className="mt-4 flex gap-2">
-              <Button variant="outline" onClick={() => setEditMode(false)} className="rounded-lg px-6 py-2 text-base font-semibold">Cancel</Button>
+            </div><DialogFooter className="sticky bottom-0 left-0 right-0 w-full z-50 bg-gradient-to-t from-white/95 via-white/80 to-transparent dark:from-gray-900/95 dark:via-gray-900/80 dark:to-transparent border-t border-blue-200 dark:border-blue-900 p-3 flex gap-2 justify-center items-center rounded-b-2xl shadow-lg" style={{paddingBottom: 'env(safe-area-inset-bottom, 1.5rem)'}}>
+              <Button variant="outline" onClick={() => setEditMode(false)} className="rounded-lg px-8 py-3 text-base font-semibold text-blue-700 dark:text-blue-200">Cancel</Button>
               <Button 
                 onClick={saveChanges} 
-                disabled={!reportDate}
-                className="rounded-lg bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold px-6 py-2 text-base shadow hover:from-blue-600 hover:to-green-500"
+                disabled={!reportDate || (statusChanged && !statusChangeComment.trim())}
+                className="rounded-lg bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold px-8 py-3 text-base shadow hover:from-blue-600 hover:to-green-500"
               >
                 Save
               </Button>
@@ -333,7 +400,38 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
             </div>
             <div>
               <h3 className="font-semibold mb-1 text-blue-700 dark:text-blue-200">Report Date</h3>
-              <p className="text-base text-gray-800 dark:text-gray-200">{format(new Date(issue.reportDate), 'PPP')}</p>
+              {(() => { const d = toDateSafe(issue.reportDate); return d instanceof Date && !isNaN(d.getTime()) ? <p className="text-base text-gray-800 dark:text-gray-200">{format(d, 'PPP')}</p> : <p className="text-base text-gray-800 dark:text-gray-200">N/A</p>; })()}
+            </div>
+            
+            {/* Timeline Section */}
+            <div>
+              <h3 className="font-semibold mb-2 text-blue-700 dark:text-blue-200">Timeline</h3>
+              <div className="max-h-60 overflow-y-auto pr-2">
+                {(issue.history ?? []).length > 0 ? (
+                  <ul className="timeline-list space-y-4">
+                    {(issue.history ?? []).map((entry, idx) => (
+                      <li key={idx} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center">
+                          <span className={`w-3 h-3 rounded-full border-2 ${entry.status === 'Completed' ? 'bg-green-500 border-green-700' : entry.status === 'In Progress' ? 'bg-yellow-400 border-yellow-600' : entry.status === 'Open' ? 'bg-blue-400 border-blue-600' : 'bg-gray-400 border-gray-600'}`}></span>
+                          {idx < (issue.history ?? []).length - 1 && <span className="h-8 w-px bg-gray-300 dark:bg-gray-700"></span>}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-base text-foreground">{entry.status}</div>
+                          <div className="text-xs text-muted-foreground">By: {entry.changedBy} {entry.role && (<span className='ml-1 text-[10px] text-blue-600 dark:text-blue-300 font-semibold'>({entry.role})</span>)}</div>
+                          {(() => { const d = toDateSafe(entry.changedAt); return d instanceof Date && !isNaN(d.getTime()) ? <div className="text-xs text-muted-foreground">{format(d, 'PPP p')}</div> : <div className="text-xs text-muted-foreground">N/A</div>; })()}
+                          {entry.note && <div className="text-sm text-gray-700 dark:text-gray-300 mt-1">{entry.note}</div>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-muted-foreground text-sm">No history available for this issue.</div>
+                )}
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-1 text-blue-700 dark:text-blue-200">Report Date</h3>
+              {(() => { const d = toDateSafe(issue.reportDate); return d instanceof Date && !isNaN(d.getTime()) ? <p className="text-base text-gray-800 dark:text-gray-200">{format(d, 'PPP')}</p> : <p className="text-base text-gray-800 dark:text-gray-200">N/A</p>; })()}
             </div>
             
             <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -364,7 +462,7 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
               </div>
             )}
             <DialogFooter className="mt-4 flex justify-end">
-              <Button onClick={() => userRole === 'technician' && setEditMode(true)} disabled={userRole === 'operator'} className="rounded-lg bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold px-6 py-2 text-base shadow hover:from-blue-600 hover:to-green-500">Edit</Button>
+              <Button onClick={() => setEditMode(true)} disabled={userRole === 'operator'} className="rounded-lg bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold px-6 py-2 text-base shadow hover:from-blue-600 hover:to-green-500">Edit</Button>
             </DialogFooter>
           </div>
         )}

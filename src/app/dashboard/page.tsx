@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,10 @@ import { BarProps } from 'recharts';
 import { useUserProfileContext } from '@/context/UserProfileContext';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
+import { IssueDetailDialog } from '@/components/shiftwise/IssueDetailDialog';
+import type { StatusOption } from "@/lib/types";
+import useSWR from 'swr';
+// REMOVE: import { Skeleton } from '@/components/ui/skeleton';
 
 const STATUS_OPTIONS = ["Open", "In Progress", "Completed", "Escalated"];
 const DURATION_OPTIONS = [
@@ -66,43 +70,83 @@ const BounceActiveBar = (props: BarProps & { dataKey?: string }) => {
   );
 };
 
+// Add a helper to robustly convert Firestore Timestamp, string, or Date to JS Date
+function toDateSafe(val: any): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val === 'string' || typeof val === 'number') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (val.seconds && typeof val.seconds === 'number') {
+    // Firestore Timestamp
+    return new Date(val.seconds * 1000);
+  }
+  return null;
+}
+
+// SWR fetcher for issues
+const fetchIssuesSWR = async (user) => {
+  if (!user) return [];
+  const q = collection(db, "shiftReports");
+  const snapshot = await getDocs(q);
+  const allIssues = [];
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const issuesArray = Array.isArray(data.issues) ? data.issues : [];
+    issuesArray.forEach((issue, idx) => {
+      allIssues.push({
+        ...issue,
+        reportId: doc.id,
+        reportDate: data.reportDate,
+        submittedBy: data.submittedBy,
+        issueIndex: idx,
+        id: `${doc.id}-${idx}`,
+      });
+    });
+  });
+  return allIssues;
+};
+
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
+
+  // Early return for loading/auth state BEFORE any other hooks
+  if (authLoading || !user) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center">
+        <div className="w-full max-w-xl mx-auto flex flex-col gap-6">
+          <div className="h-12 w-full rounded-xl bg-gray-200 animate-pulse" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-24 rounded-xl bg-gray-200 animate-pulse" />
+            <div className="h-24 rounded-xl bg-gray-200 animate-pulse" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="h-20 rounded-xl bg-gray-200 animate-pulse" />
+            <div className="h-20 rounded-xl bg-gray-200 animate-pulse" />
+            <div className="h-20 rounded-xl bg-gray-200 animate-pulse" />
+          </div>
+          <div className="h-64 w-full rounded-2xl bg-gray-200 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  // Now it's safe to call all other hooks
   const router = useRouter();
   const { profile: userProfile } = useUserProfileContext();
-  const [issues, setIssues] = useState<Issue[]>([]);
+  const { data: issues = [], isLoading: loading, mutate } = useSWR(
+    user ? ['issues', user.uid] : null,
+    () => fetchIssuesSWR(user),
+    { revalidateOnFocus: true }
+  );
+  const [userNameMap, setUserNameMap] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState("");
-  const [loading, setLoading] = useState(true);
   const [duration, setDuration] = useState("day");
   const [showTour, setShowTour] = useState(false);
   const { toast } = useToast();
-
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login");
-    }
-  }, [user, authLoading, router]);
-
-  useEffect(() => {
-    if (!user) return; // Guard against running fetch without a user
-
-    async function fetchIssues() {
-      setLoading(true);
-      const q = collection(db, "shiftReports");
-      const snapshot = await getDocs(q);
-      const allIssues: Issue[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const issuesArray = Array.isArray(data.issues) ? data.issues : [];
-        issuesArray.forEach((issue: any) => {
-          allIssues.push({ ...issue, reportId: doc.id, reportDate: data.reportDate, submittedBy: data.submittedBy });
-        });
-      });
-      setIssues(allIssues);
-      setLoading(false);
-    }
-    fetchIssues();
-  }, [user]); // Depend on user to re-fetch if the user changes
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Status counts
   const statusCounts = STATUS_OPTIONS.reduce((acc, status) => {
@@ -178,26 +222,98 @@ export default function DashboardPage() {
   }, [issues]);
 
   // Helper: Filter issues by user
-  const myIssues = user ? issues.filter(i => i.submittedBy === user.email) : [];
-  const assignedIssues = user ? issues.filter(i => i.assignedTo === user.email) : [];
-  const inProgressIssues = user ? issues.filter(i => i.status === 'In Progress' && i.assignedTo === user.email) : [];
-
-  // Return a loading indicator while auth state is being determined or if there is no user.
-  // This is done after all hooks are called to comply with the Rules of Hooks.
-  if (authLoading || !user) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
-      </div>
+  const myIssues = useMemo(() => {
+    if (!userProfile || !user) return [];
+    return issues.filter(i =>
+      (i.submittedBy && (i.submittedBy === user.uid || i.submittedBy === user.email || i.submittedBy === userProfile.name))
     );
+  }, [issues, userProfile, user]);
+  const assignedIssues = userProfile ? issues.filter(i =>
+    i.assignedTo === userProfile.uid ||
+    i.assignedTo === userProfile.email ||
+    i.assignedTo === userProfile.name
+  ) : [];
+  const inProgressIssues = userProfile ? issues.filter(i =>
+    i.status === 'In Progress' && (
+      i.assignedTo === userProfile.uid ||
+      i.assignedTo === userProfile.email ||
+      i.assignedTo === userProfile.name
+    )
+  ) : [];
+
+  // Memoize the mapped selectedIssue for IssueDetailDialog
+  const mappedSelectedIssue = useMemo(() => {
+    if (
+      selectedIssue &&
+      typeof selectedIssue.issue === 'string' &&
+      typeof selectedIssue.status === 'string' &&
+      selectedIssue.reportId
+    ) {
+      const safeDate = toDateSafe(selectedIssue.reportDate) || new Date(0);
+      return {
+        id: selectedIssue.id || selectedIssue.reportId + '-' + (selectedIssue.issueIndex ?? 0),
+        issue: selectedIssue.issue,
+        pmun: selectedIssue.pmun || '',
+        description: selectedIssue.description || '',
+        actions: selectedIssue.actions || '',
+        status: selectedIssue.status as StatusOption,
+        photos: selectedIssue.photos || [],
+        history: selectedIssue.history || [],
+        reportId: selectedIssue.reportId || '',
+        issueIndex: selectedIssue.issueIndex ?? 0,
+        reportDate: safeDate as Date,
+        submittedBy: selectedIssue.submittedBy || '',
+      };
+    }
+    return null;
+  }, [selectedIssue]);
+
+  // Helper to fetch the latest issue data from Firestore
+  async function fetchLatestIssue(issue: any) {
+    if (!issue?.reportId || typeof issue.issueIndex !== 'number') return issue;
+    const reportRef = doc(db, 'shiftReports', issue.reportId);
+    const reportSnap = await getDoc(reportRef);
+    if (!reportSnap.exists()) return issue;
+    const reportData = reportSnap.data();
+    if (!Array.isArray(reportData.issues) || !reportData.issues[issue.issueIndex]) return issue;
+    return {
+      ...reportData.issues[issue.issueIndex],
+      reportId: issue.reportId,
+      issueIndex: issue.issueIndex,
+      id: issue.id,
+      reportDate: reportData.reportDate,
+      submittedBy: reportData.submittedBy,
+    };
   }
 
-  return (    <div className="w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto py-4 sm:py-8 px-2 sm:px-4 md:px-0">
+  // Fetch user names for all unique submittedBy UIDs whenever issues change
+  useEffect(() => {
+    const fetchNames = async () => {
+      const uids = Array.from(new Set(issues.map(i => i.submittedBy).filter(Boolean)));
+      const nameMap: Record<string, string> = {};
+      await Promise.all(uids.map(async (uid) => {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData && userData.name) {
+              nameMap[uid] = userData.name;
+            }
+          }
+        } catch (e) { /* ignore */ }
+      }));
+      setUserNameMap(nameMap);
+    };
+    if (issues.length > 0) fetchNames();
+  }, [issues]);
+
+  return (
+    <div className="w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto py-4 sm:py-8 px-2 sm:px-4 md:px-0 bg-transparent">
       {user && <NotificationInitializer />}
       {/* Onboarding Tour Modal (UI only for now) */}
       {showTour && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-card rounded-2xl shadow-2xl border border-border p-8 max-w-md w-full flex flex-col items-center">
+          <div className="bg-card rounded-2xl shadow border border-border p-8 max-w-md w-full flex flex-col items-center">
             <h2 className="text-2xl font-bold mb-2 text-primary">Welcome to ShiftWise!</h2>
             <p className="mb-4 text-foreground text-center">This quick tour will show you how to log issues, view reports, and use all the features of your dashboard.</p>
             <ul className="mb-4 text-left text-foreground list-disc pl-6">
@@ -208,7 +324,7 @@ export default function DashboardPage() {
               <li>Access your profile and more</li>
             </ul>
             <button
-              className="mt-2 px-6 py-2 rounded-xl bg-primary text-primary-foreground font-semibold shadow hover:bg-primary/90"
+              className="mt-2 px-6 py-2 rounded-xl bg-primary text-primary-foreground font-semibold shadow"
               onClick={() => setShowTour(false)}
             >
               Got it!
@@ -219,7 +335,7 @@ export default function DashboardPage() {
       {/* Take a Tour button */}
       <div className="flex justify-end mb-2">
         <button
-          className="px-4 py-2 rounded-lg bg-muted text-foreground border border-border shadow hover:bg-primary/10 transition text-sm font-semibold"
+          className="px-4 py-2 rounded-lg bg-muted text-foreground border border-border shadow text-sm font-semibold"
           onClick={() => setShowTour(true)}
         >
           🎉 Take a Tour
@@ -228,7 +344,7 @@ export default function DashboardPage() {
       {/* Role badge */}
       {userProfile && (
         <div className="mb-4 flex items-center gap-3">
-          <span className={`inline-block px-4 py-1 rounded-full font-semibold text-sm shadow bg-card border border-border ${userProfile.role === 'operator' ? 'text-blue-700 bg-blue-50' : 'text-green-700 bg-green-50'}`}>
+          <span className={`inline-block px-4 py-1 rounded-full font-semibold text-sm shadow bg-card border border-border ${userProfile.role === 'operator' ? 'text-core-bright bg-neutral-verylight' : 'text-secondary-green bg-neutral-verylight'}`}> 
             {userProfile.role === 'operator' ? 'Operator' : 'Technician'}
           </span>
           <span className="text-muted-foreground">Welcome, {userProfile.name || user.email}!</span>
@@ -254,12 +370,12 @@ export default function DashboardPage() {
           {/* Issues I’ve logged */}
           <div className="bg-card rounded-xl shadow-md p-4 border border-border">
             <h3 className="text-lg font-semibold mb-2">Issues I’ve Logged</h3>
-            <div className="text-4xl font-bold text-blue-600">{myIssues?.length ?? 0}</div>
+            <div className="text-4xl font-bold text-core-bright">{myIssues?.length ?? 0}</div>
           </div>
           {/* All open issues */}
           <div className="bg-card rounded-xl shadow-md p-4 border border-border">
             <h3 className="text-lg font-semibold mb-2">All Open Issues</h3>
-            <div className="text-4xl font-bold text-orange-500">{issues.filter(i => i.status === 'Open').length}</div>
+            <div className="text-4xl font-bold text-secondary-orange">{issues.filter(i => i.status === 'Open').length}</div>
           </div>
           {/* Quick log new issue with tooltip */}
           <div className="col-span-1 md:col-span-2 flex justify-center mt-4">
@@ -267,7 +383,7 @@ export default function DashboardPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold shadow-lg hover:from-blue-600 hover:to-green-500 transition text-lg"
+                    className="px-6 py-3 rounded-xl bg-core-bright text-core-white font-bold shadow"
                     onClick={() => {
                       toast({ title: 'Navigating to Log Issue', description: 'Shortcut: L' });
                       router.push('/');
@@ -286,12 +402,12 @@ export default function DashboardPage() {
           {/* Issues assigned to me */}
           <div className="bg-card rounded-xl shadow-md p-4 border border-border">
             <h3 className="text-lg font-semibold mb-2">Issues Assigned to Me</h3>
-            <div className="text-4xl font-bold text-green-600">{assignedIssues?.length ?? 0}</div>
+            <div className="text-4xl font-bold text-secondary-green">{assignedIssues?.length ?? 0}</div>
           </div>
           {/* Issues in progress */}
           <div className="bg-card rounded-xl shadow-md p-4 border border-border">
             <h3 className="text-lg font-semibold mb-2">Issues In Progress</h3>
-            <div className="text-4xl font-bold text-yellow-500">{inProgressIssues?.length ?? 0}</div>
+            <div className="text-4xl font-bold text-secondary-yellow">{inProgressIssues?.length ?? 0}</div>
           </div>
           {/* Quick update status with tooltip */}
           <div className="col-span-1 md:col-span-2 flex justify-center mt-4">
@@ -299,7 +415,7 @@ export default function DashboardPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-lg hover:from-green-600 hover:to-blue-500 transition text-lg"
+                    className="px-6 py-3 rounded-xl bg-secondary-green text-core-white font-bold shadow"
                     onClick={() => {
                       toast({ title: 'Navigating to View Issues', description: 'Shortcut: V' });
                       router.push('/view-issues');
@@ -316,13 +432,11 @@ export default function DashboardPage() {
       ) : null}
       {/* Summary Tiles as Filters with Percentage Change */}
       <div className="w-full min-w-0 overflow-x-auto relative pb-2">
-        {/* Horizontal scroll indicator for mobile */}
-        <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background via-background/80 to-transparent z-10 hidden sm:block" />
         <div className="grid grid-flow-col auto-cols-[minmax(140px,1fr)] sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-4 mb-6 sm:mb-8 min-w-0">
         {STATUS_OPTIONS.map(status => (
           <Card
             key={status}
-            className={`group flex flex-col justify-between items-stretch shadow border border-border bg-card transition-all duration-150 cursor-pointer hover:shadow-lg active:scale-95 min-w-[140px] max-w-[180px] sm:max-w-none min-w-0 ${statusFilter === status ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+            className={`group flex flex-col justify-between items-stretch shadow border border-border bg-card cursor-pointer min-w-[140px] max-w-[180px] sm:max-w-none min-w-0 ${statusFilter === status ? 'ring-2 ring-primary ring-offset-2' : ''}`}
             style={{ minWidth: 0, minHeight: 0 }}
             onClick={() => setStatusFilter(statusFilter === status ? '' : status)}
             tabIndex={0}
@@ -333,19 +447,19 @@ export default function DashboardPage() {
             <CardHeader className="pb-2 flex flex-col items-center justify-center">
               <CardTitle className="text-sm xs:text-base md:text-lg font-semibold text-primary text-center break-words whitespace-normal w-full flex flex-col items-center">
                 <span className="break-words whitespace-normal w-full">{status}</span>
-                <span className={`mt-1 text-xs xs:text-sm md:text-base font-medium flex items-center text-center break-words whitespace-normal ${statusPercentages[status]?.percent >= 0 ? 'text-green-600' : 'text-red-600'}`}> 
+                <span className={`mt-1 text-xs xs:text-sm md:text-base font-medium flex items-center text-center break-words whitespace-normal ${statusPercentages[status]?.percent >= 0 ? 'text-secondary-green' : 'text-destructive'}`}> 
                   {statusPercentages[status]?.percent >= 0 ? '↑' : '↓'}
                   {Math.abs(statusPercentages[status]?.percent || 0).toFixed(1)}%
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col items-center justify-center">
-              <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground group-hover:scale-110 transition-transform duration-150 text-center break-words whitespace-normal w-full">{statusCounts[status] || 0}</span>
+              <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground text-center break-words whitespace-normal w-full">{statusCounts[status] || 0}</span>
             </CardContent>
           </Card>
         ))}
         <Card
-          className={`group flex flex-col justify-between items-stretch shadow border border-border bg-card transition-all duration-150 cursor-pointer hover:shadow-lg active:scale-95 min-w-[140px] max-w-[180px] sm:max-w-none min-w-0 ${statusFilter === '' ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+          className={`group flex flex-col justify-between items-stretch shadow border border-border bg-card cursor-pointer min-w-[140px] max-w-[180px] sm:max-w-none min-w-0 ${statusFilter === '' ? 'ring-2 ring-primary ring-offset-2' : ''}`}
           style={{ minWidth: 0, minHeight: 0 }}
           onClick={() => setStatusFilter("")}
           tabIndex={0}
@@ -356,25 +470,25 @@ export default function DashboardPage() {
           <CardHeader className="pb-2 flex flex-col items-center justify-center">
             <CardTitle className="text-sm xs:text-base md:text-lg font-semibold text-primary text-center break-words whitespace-normal w-full flex flex-col items-center">
               <span className="break-words whitespace-normal w-full">Total</span>
-              <span className={`mt-1 text-xs xs:text-sm md:text-base font-medium flex items-center text-center break-words whitespace-normal ${statusPercentages["Total"]?.percent >= 0 ? 'text-green-600' : 'text-red-600'}`}> 
+              <span className={`mt-1 text-xs xs:text-sm md:text-base font-medium flex items-center text-center break-words whitespace-normal ${statusPercentages["Total"]?.percent >= 0 ? 'text-secondary-green' : 'text-destructive'}`}> 
                 {statusPercentages["Total"]?.percent >= 0 ? '↑' : '↓'}
                 {Math.abs(statusPercentages["Total"]?.percent || 0).toFixed(1)}%
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col items-center justify-center">
-            <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground group-hover:scale-110 transition-transform duration-150 text-center break-words whitespace-normal w-full">{issues.length}</span>
+            <span className="text-2xl xs:text-3xl md:text-4xl font-bold text-foreground text-center break-words whitespace-normal w-full">{issues.length}</span>
           </CardContent>
         </Card>
         </div>
       </div>
       {/* Charts Section */}
+      {/* Charts are now static, no animation or drop-shadows */}
       {!loading && Array.isArray(chartData) && Array.isArray(issuesByDay) && (
         <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 order-2 md:order-none">
           {/* Issues by Status Bar Chart */}
-          <div className="bg-card dark:bg-card rounded-3xl shadow-2xl p-6 border border-border relative overflow-hidden">
-            <div className="absolute -top-10 -left-10 w-40 h-40 bg-gradient-to-br from-blue-400/20 via-indigo-300/10 to-transparent rounded-full blur-3xl animate-pulse-slow z-0" />
-            <h3 className="text-xl font-extrabold mb-4 text-blue-600 dark:text-blue-300 drop-shadow-lg animate-fadein-down tracking-tight z-10 relative">Issues by Status</h3>
+          <div className="bg-card rounded-3xl shadow-md p-6 border border-border relative overflow-hidden">
+            <h3 className="text-xl font-extrabold mb-4 text-primary tracking-tight z-10 relative">Issues by Status</h3>
             <ChartContainer config={{}}>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={chartData} barCategoryGap="20%">
@@ -384,30 +498,18 @@ export default function DashboardPage() {
                   <Legend iconType="circle" wrapperStyle={{ fontSize: 15, fontWeight: 600, color: '#3b82f6', marginTop: 8 }} />
                   <Bar
                     dataKey="count"
-                    fill="url(#statusGradient)"
+                    fill="#00B6F0"
                     radius={[12, 12, 0, 0]}
-                    animationDuration={1200}
-                    animationEasing="ease"
-                    isAnimationActive={true}
-                    animationBegin={200}
-                    activeBar={<BounceActiveBar fill="#3b82f6" dataKey="count" />}
-                    style={{ filter: 'drop-shadow(0 6px 18px #3b82f633)' }}
+                    isAnimationActive={false}
                     barSize={32}
                   />
-                  <defs>
-                    <linearGradient id="statusGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.95" />
-                      <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.7" />
-                    </linearGradient>
-                  </defs>
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
           </div>
           {/* Issues by Day Bar Chart */}
-          <div className="bg-card dark:bg-card rounded-3xl shadow-2xl p-6 border border-border relative overflow-hidden">
-            <div className="absolute -bottom-10 right-0 w-32 h-32 bg-gradient-to-tr from-green-300/20 via-emerald-200/10 to-transparent rounded-full blur-2xl animate-pulse-slower z-0" />
-            <h3 className="text-xl font-extrabold mb-4 text-emerald-600 dark:text-emerald-300 drop-shadow-lg animate-fadein-down tracking-tight z-10 relative">Issues Created (Last 7 Days)</h3>
+          <div className="bg-card rounded-3xl shadow-md p-6 border border-border relative overflow-hidden">
+            <h3 className="text-xl font-extrabold mb-4 text-secondary-green tracking-tight z-10 relative">Issues Created (Last 7 Days)</h3>
             <ChartContainer config={{}}>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={issuesByDay} barCategoryGap="20%">
@@ -417,22 +519,11 @@ export default function DashboardPage() {
                   <Legend iconType="circle" wrapperStyle={{ fontSize: 15, fontWeight: 600, color: '#10b981', marginTop: 8 }} />
                   <Bar
                     dataKey="count"
-                    fill="url(#dayGradient)"
+                    fill="#8CD211"
                     radius={[12, 12, 0, 0]}
-                    animationDuration={1200}
-                    animationEasing="ease"
-                    isAnimationActive={true}
-                    animationBegin={400}
-                    activeBar={<BounceActiveBar fill="#10b981" dataKey="count" />}
-                    style={{ filter: 'drop-shadow(0 6px 18px #10b98133)' }}
+                    isAnimationActive={false}
                     barSize={32}
                   />
-                  <defs>
-                    <linearGradient id="dayGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.95" />
-                      <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0.7" />
-                    </linearGradient>
-                  </defs>
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -440,50 +531,67 @@ export default function DashboardPage() {
         </div>
       )}
       {/* Filter Bar (removed status dropdown) */}
-      <div className="flex flex-wrap gap-4 mb-6 items-center bg-background dark:bg-background">
-        {/* Add more filters here (date, user, etc.) */}
-        <div className="flex-1 transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95 hover:shadow-xl focus-within:ring-2 focus-within:ring-blue-400 focus-within:ring-offset-2">
-          <EmailDailyReport />
-        </div>
-        <Button
-          onClick={() => router.push("/")}
-          className="transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95 hover:shadow-xl focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 bg-blue-500 text-white font-bold px-6 py-3 rounded-2xl shadow-md hover:bg-blue-600 focus:outline-none"
-        >
-          Log New Issue
-        </Button>
+      <div className="flex flex-wrap gap-4 mb-6 items-center bg-background">
+        <EmailDailyReport />
       </div>
       {/* Recent Issues List */}
-      <div className="bg-card dark:bg-card rounded-xl shadow-md p-4">
-        <h2 className="text-xl font-semibold mb-4 text-foreground">Recent Issues</h2>
-        {loading ? (
-          <div className="text-foreground">Loading...</div>
-        ) : filteredIssues.length === 0 ? (
-          <div className="text-muted-foreground">No issues found.</div>
-        ) : (
+      <Card className="rounded-2xl border border-border bg-card mt-8">
+        <CardHeader className="bg-card text-foreground">
+          <CardTitle className="text-primary">Recent Issues</CardTitle>
+        </CardHeader>
+        <CardContent className="bg-card text-foreground">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm text-foreground">
+            <table className="min-w-full text-foreground text-base md:text-lg">
               <thead>
-                <tr className="bg-muted dark:bg-muted text-foreground">
-                  <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-left">Issue</th>
-                  <th className="px-3 py-2 text-left">Submitted By</th>
-                  <th className="px-3 py-2 text-left">Date</th>
+                <tr>
+                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Issue</th>
+                  <th className="px-4 py-2 text-left">Submitted By</th>
+                  <th className="px-4 py-2 text-left">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredIssues.slice(0, 10).map((issue, idx) => (
-                  <tr key={idx} className="border-b dark:border-border last:border-0">
-                    <td className="px-3 py-2 font-semibold text-blue-700 dark:text-blue-400">{issue.status}</td>
-                    <td className="px-3 py-2">{issue.issue}</td>
-                    <td className="px-3 py-2">{issue.submittedBy}</td>
-                    <td className="px-3 py-2">{issue.reportDate ? new Date(issue.reportDate.seconds ? issue.reportDate.seconds * 1000 : issue.reportDate).toLocaleDateString() : "-"}</td>
+                {filteredIssues.map((issue, idx) => (
+                  <tr
+                    key={issue.id || idx}
+                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                    onClick={async () => {
+                      const latest = await fetchLatestIssue(issue);
+                      setSelectedIssue(latest);
+                      setDialogOpen(true);
+                    }}
+                  >
+                    <td className="px-4 py-2 text-left">
+                      <span className={
+                        issue.status === 'Completed' ? 'text-green-600 font-semibold' :
+                        issue.status === 'In Progress' ? 'text-yellow-600 font-semibold' :
+                        issue.status === 'Open' ? 'text-blue-600 font-semibold' :
+                        'text-gray-600 font-semibold'
+                      }>
+                        {issue.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-left max-w-xs truncate" title={issue.issue}>{issue.issue}</td>
+                    <td className="px-4 py-2 text-left max-w-xs truncate" title={userNameMap[issue.submittedBy] || issue.submittedBy}>{userNameMap[issue.submittedBy] || issue.submittedBy}</td>
+                    <td className="px-4 py-2 text-left">{issue.reportDate && (issue.reportDate.seconds ? new Date(issue.reportDate.seconds * 1000).toLocaleDateString() : new Date(issue.reportDate).toLocaleDateString())}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
+      {/* Always render the IssueDetailDialog at the root of the page */}
+      <IssueDetailDialog
+        issue={mappedSelectedIssue}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onIssueUpdated={async updated => {
+          setSelectedIssue(updated);
+          await mutate(); // Re-fetch all issues after update
+        }}
+        userRole={'technician'}
+      />
       {/* Bottom navigation bar */}
       <BottomNavigationBar />
     </div>

@@ -262,3 +262,5 @@ export const IssueBlockCard = forwardRef(function IssueBlockCard({
     </div>
   );
 });
+
+export default React.memo(IssueBlockCard);

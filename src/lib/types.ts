@@ -25,6 +25,14 @@ export type StatusOption = (typeof STATUS_OPTIONS)[number]; // Union type for st
 // DisplayIssue Interface
 // ===============================
 // Used for displaying issues pulled from Firestore, with extra metadata
+export interface IssueHistoryEntry {
+  status: StatusOption;
+  changedBy: string;
+  changedAt: Date;
+  note?: string;
+  role?: string; // operator or technician
+}
+
 export interface DisplayIssue extends IssueBlockFormValues {
   /** Unique identifier for React lists */
   id: string;
@@ -36,4 +44,5 @@ export interface DisplayIssue extends IssueBlockFormValues {
   reportDate: Date;
   /** Person who submitted the report */
   submittedBy: string;
+  history?: IssueHistoryEntry[];
 }

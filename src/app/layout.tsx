@@ -14,7 +14,6 @@ import { Analytics } from '@vercel/analytics/react';
 import DarkModeProvider from '@/components/shared/DarkModeProvider';
 import AnimatedBackground from '@/components/shared/AnimatedBackground';
 import KeyboardShortcutsProvider from '@/components/KeyboardShortcutsProvider';
-import FloatingLogIssueButton from '@/components/shared/FloatingLogIssueButton';
 import AuthGate from "@/components/AuthGate";
 import { useAuth } from "@/context/AuthContext";
 import AppShell from '@/components/AppShell';

@@ -23,18 +23,21 @@ import { db } from '@/lib/firebaseClient';
 import { BottomNavigationBar } from '@/components/shared/BottomNavigationBar';
 import { Input } from '@/components/ui/input';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { useSWRConfig } from 'swr';
 
 export default function ViewIssuesPage() {
   const { user, loading, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useDarkMode();
   const router = useRouter();
   const { profile: userProfile } = useUserProfileContext();
+  const { mutate } = useSWRConfig();
   const [allIssues, setAllIssues] = useState<DisplayIssue[]>([]);
+  const [userProfileMap, setUserProfileMap] = useState<Record<string, { name?: string, role?: string }>>({});
   const [updating, setUpdating] = useState<string | null>(null);
   const [pendingStatus, setPendingStatus] = useState<{ [id: string]: StatusOption }>({});
   const [savedStatus, setSavedStatus] = useState<{ [id: string]: boolean }>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusOption | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [pmunFilter, setPmunFilter] = useState('all');
   const [submittedByFilter, setSubmittedByFilter] = useState('all');
   const [dateRange, setDateRange] = useState<{ start: Date | null, end: Date | null }>({ start: null, end: null });
@@ -51,6 +54,7 @@ export default function ViewIssuesPage() {
     const fetchReports = async () => {
       const snap = await getDocs(collection(db, "shiftReports"));
       const issues: DisplayIssue[] = [];
+      const submitters = new Set<string>();
       snap.forEach((docSnap) => {
         const data = docSnap.data() as ShiftReportFormValues;
         const repDate = (data.reportDate as any)?.toDate ? (data.reportDate as any).toDate() : new Date(data.reportDate);
@@ -65,11 +69,29 @@ export default function ViewIssuesPage() {
                 reportDate: repDate,
                 submittedBy: data.submittedBy,
               });
+              if (data.submittedBy && typeof data.submittedBy === 'string') {
+                submitters.add(data.submittedBy);
+              }
             }
           });
         }
       });
       setAllIssues(issues);
+      // Fetch user profiles for all unique submitters
+      const submitterArr = Array.from(submitters);
+      const profileMap: Record<string, { name?: string, role?: string }> = {};
+      await Promise.all(submitterArr.map(async (uidOrEmail) => {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', uidOrEmail));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData) {
+              profileMap[uidOrEmail] = { name: userData.name, role: userData.role };
+            }
+          }
+        } catch (e) { /* ignore */ }
+      }));
+      setUserProfileMap(profileMap);
     };
     fetchReports();
   }, [user]);
@@ -82,22 +104,67 @@ export default function ViewIssuesPage() {
   const handleSaveStatus = async (issue: DisplayIssue) => {
     setUpdating(issue.id);
     const newStatus = pendingStatus[issue.id];
-    // Fetch the parent shift report document
     const reportRef = doc(db, "shiftReports", issue.reportId);
-    const reportSnap = await getDoc(reportRef);
-    if (!reportSnap.exists()) return setUpdating(null);
-    const reportData = reportSnap.data();
-    if (!Array.isArray(reportData.issues)) return setUpdating(null);
-    // Update the relevant issue in the array
-    const updatedIssues = [...reportData.issues];
-    updatedIssues[issue.issueIndex] = {
-      ...updatedIssues[issue.issueIndex],
-      status: newStatus,
-    };
-    await updateDoc(reportRef, { issues: updatedIssues });
-    setAllIssues(prev => prev.map(i => i.id === issue.id ? { ...i, status: newStatus } : i));
-    setUpdating(null);
-    setSavedStatus(prev => ({ ...prev, [issue.id]: true }));
+    try {
+      const reportSnap = await getDoc(reportRef);
+      const reportData = reportSnap.data();
+      if (!reportData || !Array.isArray(reportData.issues)) throw new Error('No issues array');
+      const updatedIssues = [...reportData.issues];
+      const prevHistory = Array.isArray(updatedIssues[issue.issueIndex].history) ? updatedIssues[issue.issueIndex].history : [];
+      // Only add a history entry if the status actually changed
+      if (newStatus !== updatedIssues[issue.issueIndex].status) {
+        const userName = userProfile?.name || user?.displayName || user?.email || user?.uid || 'Unknown';
+        const newHistoryEntry = {
+          status: newStatus,
+          changedBy: userName,
+          changedAt: new Date(),
+          role: userProfile?.role || '',
+        };
+        // Only add note if a comment is provided (prompt for comment in UI if needed)
+        if (pendingStatus[issue.id + '_comment']) {
+          newHistoryEntry.note = pendingStatus[issue.id + '_comment'];
+        }
+        updatedIssues[issue.issueIndex] = {
+          ...updatedIssues[issue.issueIndex],
+          status: newStatus,
+          history: [...prevHistory, newHistoryEntry],
+        };
+      } else {
+        updatedIssues[issue.issueIndex] = {
+          ...updatedIssues[issue.issueIndex],
+          status: newStatus,
+        };
+      }
+      await updateDoc(reportRef, { issues: updatedIssues });
+      setAllIssues(prev => prev.map(i => i.id === issue.id ? { ...i, status: newStatus } : i));
+      setSavedStatus(prev => ({ ...prev, [issue.id]: true }));
+      // Force refresh: fetch latest issues from Firestore
+      const snap = await getDocs(collection(db, "shiftReports"));
+      const issues: DisplayIssue[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data() as ShiftReportFormValues;
+        const repDate = (data.reportDate as any)?.toDate ? (data.reportDate as any).toDate() : new Date(data.reportDate);
+        if (Array.isArray(data.issues)) {
+          data.issues.forEach((iss, idx) => {
+            if (iss && typeof iss === 'object' && iss.issue) {
+              issues.push({
+                ...iss,
+                id: `${docSnap.id}-${idx}`,
+                reportId: docSnap.id,
+                issueIndex: idx,
+                reportDate: repDate,
+                submittedBy: data.submittedBy,
+              });
+            }
+          });
+        }
+      });
+      setAllIssues(issues);
+    } catch (err) {
+      setSavedStatus(prev => ({ ...prev, [issue.id]: false }));
+    } finally {
+      setUpdating(null);
+    }
   };
 
   // Extract unique PMUNs and submitters for dropdowns
@@ -135,7 +202,7 @@ export default function ViewIssuesPage() {
   if (loading || !user || !userProfile) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+        <Loader2 className="h-8 w-8 text-primary" />
       </div>
     );
   }
@@ -143,35 +210,35 @@ export default function ViewIssuesPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Sticky header bar for email, logout, and dark mode toggle */}
-      <div className="sticky top-0 z-40 w-full bg-card border-b border-border shadow-md flex items-center justify-between px-4 py-3 mb-6 rounded-b-2xl">
+      <div className="sticky top-0 z-40 w-full bg-card border-b border-border flex items-center justify-between px-4 py-3 mb-6 rounded-b-2xl">
         <span className="text-primary font-semibold text-base sm:text-lg md:text-xl truncate">{user?.email}</span>
         <div className="flex items-center gap-2">
           <button
             onClick={toggleDarkMode}
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-muted hover:bg-accent transition-colors border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
             aria-label="Toggle dark mode"
             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            {darkMode ? <Moon className="h-6 w-6 text-primary" /> : <Sun className="h-6 w-6 text-yellow-400" />}
+            {darkMode ? <Moon className="h-6 w-6 text-primary" /> : <Sun className="h-6 w-6 text-secondary-yellow" />}
           </button>
           <button
             onClick={logout}
-            className="text-red-500 font-semibold px-3 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition text-sm sm:text-base md:text-lg"
+            className="text-destructive font-semibold px-3 py-1 rounded-lg text-sm sm:text-base md:text-lg"
           >
             Log Out
           </button>
         </div>
       </div>
       {/* Sticky, beautiful filter bar */}
-      <div className="sticky top-0 z-30 w-full bg-background/80 dark:bg-background/80 backdrop-blur-md border-b border-border shadow-md flex flex-wrap gap-2 sm:gap-4 items-center px-2 sm:px-4 py-3 mb-4 rounded-b-2xl">
+      <div className="sticky top-0 z-30 w-full bg-background border-b border-border flex flex-wrap gap-2 sm:gap-4 items-center px-2 sm:px-4 py-3 mb-4 rounded-b-2xl">
         <Input
           type="text"
           placeholder="Search issues, PMUN, description, or submitter..."
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          className="w-full sm:w-56 md:w-64 lg:w-80 bg-card text-foreground border border-border rounded-xl px-3 py-2 shadow-sm"
+          className="w-full sm:w-56 md:w-64 lg:w-80 bg-card text-foreground border border-border rounded-xl px-3 py-2"
         />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as string)}>
           <SelectTrigger className="w-32 bg-card text-foreground border border-border rounded-xl">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -182,7 +249,7 @@ export default function ViewIssuesPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={pmunFilter} onValueChange={setPmunFilter}>
+        <Select value={pmunFilter} onValueChange={v => setPmunFilter(v as string)}>
           <SelectTrigger className="w-32 bg-card text-foreground border border-border rounded-xl">
             <SelectValue placeholder="PMUN" />
           </SelectTrigger>
@@ -193,7 +260,7 @@ export default function ViewIssuesPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={submittedByFilter} onValueChange={setSubmittedByFilter}>
+        <Select value={submittedByFilter} onValueChange={v => setSubmittedByFilter(v as string)}>
           <SelectTrigger className="w-32 bg-card text-foreground border border-border rounded-xl">
             <SelectValue placeholder="Submitted By" />
           </SelectTrigger>
@@ -210,36 +277,36 @@ export default function ViewIssuesPage() {
         </div>
         <button
           onClick={resetFilters}
-          className="ml-auto px-4 py-2 rounded-xl bg-muted text-foreground border border-border shadow hover:bg-primary/10 transition"
+          className="ml-auto px-4 py-2 rounded-xl bg-muted text-foreground border border-border"
         >
           Clear Filters
         </button>
       </div>
       {/* Centered main heading */}
-      <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight text-primary drop-shadow-md text-center mb-8">
+      <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight text-primary text-center mb-8">
         View & Update Issues
       </h1>
-      <Card className="shadow-2xl rounded-2xl border border-border bg-card dark:bg-card">
-        <CardHeader className="bg-card dark:bg-card text-foreground dark:text-foreground">
-          <CardTitle className="text-xl sm:text-2xl font-bold text-primary dark:text-blue-300">All Issues ({allIssues.length})</CardTitle>
+      <Card className="rounded-2xl border border-border bg-card">
+        <CardHeader className="bg-card text-foreground">
+          <CardTitle className="text-xl sm:text-2xl font-bold text-primary">All Issues ({allIssues.length})</CardTitle>
         </CardHeader>
-        <CardContent className="bg-card dark:bg-card text-foreground dark:text-foreground">
+        <CardContent className="bg-card text-foreground">
           {allIssues.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
               No issues found.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <div className="rounded-2xl shadow-xl border border-border bg-card dark:bg-card overflow-auto w-full">
-                <Table className="min-w-full text-foreground dark:text-foreground">
-                  <TableHeader className="sticky top-0 z-10 bg-card/95 dark:bg-card/95 backdrop-blur-md">
+              <div className="rounded-2xl border border-border bg-card overflow-auto w-full">
+                <Table className="min-w-full text-foreground">
+                  <TableHeader className="sticky top-0 z-10 bg-card/95">
                     <TableRow>
-                      <TableHead className="font-semibold text-primary dark:text-blue-300 text-base px-6 py-4 whitespace-nowrap">Issue Title</TableHead>
-                      <TableHead className="font-semibold text-primary dark:text-blue-300 text-base px-6 py-4 whitespace-nowrap">PMUN</TableHead>
-                      <TableHead className="font-semibold text-primary dark:text-blue-300 text-base px-6 py-4 whitespace-nowrap">Attachments</TableHead>
-                      <TableHead className="font-semibold text-primary dark:text-blue-300 text-base px-6 py-4 whitespace-nowrap">Status</TableHead>
-                      <TableHead className="font-semibold text-primary dark:text-blue-300 text-base px-6 py-4 whitespace-nowrap">Submitted By</TableHead>
-                      <TableHead className="font-semibold text-primary dark:text-blue-300 text-base px-6 py-4 whitespace-nowrap">Report Date</TableHead>
+                      <TableHead className="font-semibold text-primary text-base px-6 py-4 whitespace-nowrap">Issue Title</TableHead>
+                      <TableHead className="font-semibold text-primary text-base px-6 py-4 whitespace-nowrap">PMUN</TableHead>
+                      <TableHead className="font-semibold text-primary text-base px-6 py-4 whitespace-nowrap">Attachments</TableHead>
+                      <TableHead className="font-semibold text-primary text-base px-6 py-4 whitespace-nowrap">Status</TableHead>
+                      <TableHead className="font-semibold text-primary text-base px-6 py-4 whitespace-nowrap">Submitted By</TableHead>
+                      <TableHead className="font-semibold text-primary text-base px-6 py-4 whitespace-nowrap">Report Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -248,21 +315,21 @@ export default function ViewIssuesPage() {
                       return (
                         <TableRow
                           key={issue.id}
-                          className={`transition-colors ${idx % 2 === 0 ? 'bg-muted/60 dark:bg-blue-900/30' : 'bg-card dark:bg-card'}`}
+                          className={`${idx % 2 === 0 ? 'bg-neutral-verylight' : 'bg-card'}`}
                         >
-                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground dark:text-foreground">
+                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground">
                             <span className="font-medium max-w-xs truncate" title={issue.issue}>{issue.issue}</span>
                           </TableCell>
-                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground dark:text-foreground">{issue.pmun || '-'}</TableCell>
+                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground">{issue.pmun || '-'}</TableCell>
                           <TableCell className="text-center px-6 py-4 text-base whitespace-nowrap">
                             {issue.photos && issue.photos.length > 0 ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-semibold text-xs shadow-sm border border-blue-200 dark:border-blue-700">
-                                <Paperclip className="h-4 w-4 text-blue-500 dark:text-blue-300" />
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-neutral-verylight text-core-bright font-semibold text-xs border border-border">
+                                <Paperclip className="h-4 w-4 text-core-bright" />
                                 {issue.photos.length}
                                 <span className="sr-only">attachments</span>
                               </span>
                             ) : (
-                              <span className="inline-block px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-medium text-xs border border-gray-200 dark:border-gray-700">-</span>
+                              <span className="inline-block px-3 py-1 rounded-full bg-neutral-light text-neutral-medium font-medium text-xs border border-border">-</span>
                             )}
                           </TableCell>
                           <TableCell className="px-6 py-4 text-base whitespace-nowrap flex items-center gap-2">
@@ -271,12 +338,25 @@ export default function ViewIssuesPage() {
                               onValueChange={(val) => handleStatusChange(issue, val as StatusOption)}
                               disabled={updating === issue.id}
                             >
-                              <SelectTrigger className="w-[140px] rounded-lg border-blue-300 focus:ring-2 focus:ring-blue-400">
+                              <SelectTrigger className="w-[140px] rounded-lg border-2 border-gray-300 focus:ring-2 focus:ring-secondary-green text-center font-bold text-base">
                                 <SelectValue placeholder="Status" />
                               </SelectTrigger>
                               <SelectContent>
                                 {STATUS_OPTIONS.map((s) => (
-                                  <SelectItem key={s} value={s} className="capitalize">
+                                  <SelectItem
+                                    key={s}
+                                    value={s}
+                                    className={
+                                      `capitalize flex items-center justify-center font-bold text-base my-1 rounded-full px-0 py-0 border-none focus:outline-none ` +
+                                      (s === 'Open' ? 'bg-green-400 text-white' :
+                                       s === 'In Progress' ? 'bg-yellow-400 text-black' :
+                                       s === 'Escalated' ? 'bg-gray-200 text-red-600 border border-red-400' :
+                                       s === 'Completed' ? 'bg-blue-400 text-white' :
+                                       '')
+                                    }
+                                    style={{ minHeight: '40px', minWidth: '120px', textAlign: 'center' }}
+                                  >
+                                    {s === 'Escalated' && <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-2"></span>}
                                     {s}
                                   </SelectItem>
                                 ))}
@@ -284,23 +364,28 @@ export default function ViewIssuesPage() {
                             </Select>
                             {pendingStatus[issue.id] && pendingStatus[issue.id] !== issue.status && (
                               <button
-                                className="ml-2 px-3 py-1 rounded-lg bg-blue-600 text-white font-semibold shadow hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="ml-2 px-3 py-1 rounded-lg bg-core-bright text-core-white font-semibold"
                                 onClick={() => handleSaveStatus(issue)}
                                 disabled={updating === issue.id}
                               >
                                 {updating === issue.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <Loader2 className="h-4 w-4 text-primary" />
                                 ) : (
                                   'Save'
                                 )}
                               </button>
                             )}
                             {savedStatus[issue.id] && (
-                              <CheckCircle className="ml-2 h-5 w-5 text-green-500" />
+                              <CheckCircle className="ml-2 h-5 w-5 text-secondary-green" />
                             )}
                           </TableCell>
-                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground dark:text-foreground">{issue.submittedBy}</TableCell>
-                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground dark:text-foreground">{format(new Date(issue.reportDate), 'PPp')}</TableCell>
+                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground">
+                            {userProfileMap[issue.submittedBy]?.name || issue.submittedBy}
+                            {userProfileMap[issue.submittedBy]?.role && (
+                              <span className="ml-1 text-xs text-blue-600 font-semibold">({userProfileMap[issue.submittedBy].role})</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-base whitespace-nowrap text-foreground">{format(new Date(issue.reportDate), 'PPp')}</TableCell>
                         </TableRow>
                       );
                     })}

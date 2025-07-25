@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useUserProfileContext } from '@/context/UserProfileContext';
 import { useState } from "react";
+import Link from 'next/link';
 
 export function BottomNavigationBar() {
   const router = useRouter();
@@ -82,9 +83,10 @@ export function BottomNavigationBar() {
             </filter>
           </svg>
           {navItems.map((item, idx) => (
-            <button
+            <Link
               key={item.path}
-              onClick={() => router.push(item.path)}
+              href={item.path}
+              prefetch={true}
               className={`flex flex-col items-center justify-center gap-0.5 px-2 sm:px-4 py-1 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary ${item.active ? 'text-primary font-bold scale-110' : 'text-muted-foreground hover:text-primary/80'}`}
               aria-label={item.label}
               tabIndex={0}
@@ -92,7 +94,7 @@ export function BottomNavigationBar() {
             >
               {item.icon}
               <span className="text-xs font-medium mt-0.5" aria-hidden="true">{item.label}</span>
-            </button>
+            </Link>
           ))}
         </div>
       </nav>

@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import React from "react";
 import { BottomNavigationBar } from '@/components/shared/BottomNavigationBar';
 import AuthGate from '@/components/AuthGate';
-import FloatingLogIssueButton from '@/components/shared/FloatingLogIssueButton';
 import { Analytics } from '@vercel/analytics/react';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -24,7 +23,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <Analytics />
       <Toaster />
-      {showNav && <FloatingLogIssueButton />}
     </>
   );
 } 

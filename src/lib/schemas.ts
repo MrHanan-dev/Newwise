@@ -22,6 +22,13 @@ export const issueBlockSchema = z.object({
     errorMap: () => ({ message: "Please select a valid status." })
   }).default('Open'),
   photos: z.array(z.string()).optional().default([]),
+  history: z.array(z.object({
+    status: z.enum(STATUS_OPTIONS),
+    changedBy: z.string(),
+    changedAt: z.date(),
+    note: z.string().optional(),
+    role: z.string().optional(),
+  })).optional().default([]),
 });
 
 // ===============================

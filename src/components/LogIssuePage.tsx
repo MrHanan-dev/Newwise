@@ -20,6 +20,7 @@ import type { ShiftReportFormValues, StatusOption, DisplayIssue } from '@/lib/ty
 import { BottomNavigationBar } from '@/components/shared/BottomNavigationBar';
 import PhotoUploader from '@/components/PhotoUploader';
 import { useRouter } from 'next/navigation';
+import { useSWRConfig } from 'swr';
 
 // Inline DarkModeToggle (copied from NavigationBar for reuse)
 function DarkModeToggle() {
@@ -39,6 +40,7 @@ function DarkModeToggle() {
 const LogIssuePage = () => {
   const { user, logout } = useAuth();
   const { profile, loading: profileLoading } = useUserProfileContext();
+  const { mutate } = useSWRConfig();
   const [description, setDescription] = useState('');
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [open, setOpen] = useState(false);
@@ -136,13 +138,45 @@ const LogIssuePage = () => {
       const reportData = reportSnap.data();
       if (!reportData || !Array.isArray(reportData.issues)) throw new Error('No issues array');
       const updatedIssues = [...reportData.issues];
+      const prevHistory = Array.isArray(updatedIssues[issue.issueIndex].history) ? updatedIssues[issue.issueIndex].history : [];
       updatedIssues[issue.issueIndex] = {
         ...updatedIssues[issue.issueIndex],
         status: newStatus,
+        history: [
+          ...prevHistory,
+          {
+            status: newStatus,
+            changedBy: user?.displayName || user?.email || user?.uid || 'Unknown',
+            changedAt: new Date(),
+            note: '',
+          },
+        ],
       };
       await updateDoc(reportRef, { issues: updatedIssues });
       setAllIssues(prev => prev.map(i => i.id === issue.id ? { ...i, status: newStatus } : i));
       setSavedStatus(prev => ({ ...prev, [issue.id]: true }));
+      // Force refresh: fetch latest issues from Firestore
+      const snap = await getDocs(collection(db, "shiftReports"));
+      const issues: DisplayIssue[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data() as ShiftReportFormValues;
+        const repDate = (data.reportDate as any)?.toDate ? (data.reportDate as any).toDate() : new Date(data.reportDate);
+        if (Array.isArray(data.issues)) {
+          data.issues.forEach((iss, idx) => {
+            if (iss && typeof iss === 'object' && iss.issue) {
+              issues.push({
+                ...iss,
+                id: `${docSnap.id}-${idx}`,
+                reportId: docSnap.id,
+                issueIndex: idx,
+                reportDate: repDate,
+                submittedBy: data.submittedBy,
+              });
+            }
+          });
+        }
+      });
+      setAllIssues(issues);
     } catch (err) {
       setSavedStatus(prev => ({ ...prev, [issue.id]: false }));
     } finally {
@@ -232,6 +266,7 @@ const LogIssuePage = () => {
       }
     });
     setAllIssues(issues);
+    mutate(['issues', user]);
   };
 
   const handleLogout = async () => {
