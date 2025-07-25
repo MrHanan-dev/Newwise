@@ -244,7 +244,9 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
       if (!o) setEditMode(false); // Only reset editMode when closing
       onOpenChange(o);
     }}>
-      <DialogContent className="h-screen max-h-screen w-full max-w-full flex flex-col overflow-y-auto bg-gradient-to-br from-white via-blue-50 to-green-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl border-2 border-blue-200 dark:border-blue-900 p-2 sm:p-4 md:p-6 cursor-default text-sm">
+      <DialogContent
+        className="w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl flex flex-col overflow-y-auto bg-gradient-to-br from-white via-blue-50 to-green-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-2 border-blue-200 dark:border-blue-900 p-2 sm:p-4 md:p-6 cursor-default text-sm h-full max-h-full"
+      >
         <DialogTitle className="text-2xl font-bold mb-4 text-blue-700 dark:text-blue-200">{issue?.issue || 'Issue Details'}</DialogTitle>
         {/* Only render the details UI as before, no tabs or comments */}
         {editMode ? (
@@ -462,7 +464,7 @@ export function IssueDetailDialog({ issue, open, onOpenChange, onIssueUpdated, u
               </div>
             )}
             <DialogFooter className="mt-4 flex justify-end">
-              <Button onClick={() => setEditMode(true)} disabled={userRole === 'operator'} className="rounded-lg bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold px-6 py-2 text-base shadow hover:from-blue-600 hover:to-green-500">Edit</Button>
+              <Button onClick={() => setEditMode(true)} className="rounded-lg bg-gradient-to-r from-blue-500 to-green-400 text-white font-bold px-6 py-2 text-base shadow hover:from-blue-600 hover:to-green-500">Edit</Button>
             </DialogFooter>
           </div>
         )}
