@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DateRangePicker } from '@/components/ui/date-range-picker'; // (Assume this exists or will be created)
 
-import { format } from 'date-fns'; // For date formatting
+import { format, isValid, parseISO } from 'date-fns'; // For date formatting and validation
 import { ExternalLink, Filter, Search, ChevronDown, ChevronUp, Paperclip, Bell, Loader2 } from 'lucide-react'; // Icons
 import { NotificationToggle } from '@/components/ui/notification-toggle'; // Notification toggle component
 import type { ShiftReportFormValues, StatusOption, DisplayIssue } from '@/lib/types'; // Types
@@ -226,6 +226,21 @@ export default function IssueHistoryPage() {
     ));
   };
 
+  // Helper function to safely parse and validate dates
+  function getValidDate(date: any): Date | null {
+    if (!date) return null;
+    if (date instanceof Date && isValid(date)) return date;
+    if (typeof date === 'string') {
+      const parsed = parseISO(date);
+      return isValid(parsed) ? parsed : null;
+    }
+    if (typeof date === 'object' && typeof date.toDate === 'function') {
+      const d = date.toDate();
+      return isValid(d) ? d : null;
+    }
+    return null;
+  }
+
   // ========== Render Loading State ==========
   // Display a loader while authentication is in progress or user is not available
   if (loading || !user) {
@@ -335,7 +350,7 @@ export default function IssueHistoryPage() {
                       </div>
                       <div className="bg-neutral-verylight px-4 py-2 border-t border-border flex justify-between items-center">
                         <div className="text-xs text-muted-foreground">
-                          {format(issue.reportDate, 'MMM d, yyyy, h:mm a')}
+                          {(() => { const d = getValidDate(issue.reportDate); return d ? format(d, 'MMM d, yyyy, h:mm a') : 'Invalid date'; })()}
                         </div>
                         <div className="flex items-center gap-3">
                           {issue.photos && issue.photos.length > 0 && (
@@ -421,7 +436,7 @@ export default function IssueHistoryPage() {
                               {issue.status}
                             </TableCell>
                             <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">{userNameMap[issue.submittedBy] || issue.submittedBy}</TableCell>
-                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">{format(new Date(issue.reportDate), 'PPp')}</TableCell>
+                            <TableCell className="px-6 py-4 text-base md:text-lg whitespace-nowrap text-foreground">{(() => { const d = getValidDate(issue.reportDate); return d ? format(d, 'PPp') : 'Invalid date'; })()}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
