@@ -135,11 +135,17 @@ export default function DashboardPage() {
   // Now it's safe to call all other hooks
   const router = useRouter();
   const { profile: userProfile } = useUserProfileContext();
-  const { data: issues = [], isLoading: loading, mutate } = useSWR(
+  const { data: issuesRaw = [], isLoading: loading, mutate } = useSWR(
     user ? ['issues', user.uid] : null,
     () => fetchIssuesSWR(user),
     { revalidateOnFocus: true }
   );
+  // Sort issues by reportDate descending (newest first)
+  const issues = [...issuesRaw].sort((a, b) => {
+    const dateA = a.reportDate?.seconds ? new Date(a.reportDate.seconds * 1000) : new Date(a.reportDate);
+    const dateB = b.reportDate?.seconds ? new Date(b.reportDate.seconds * 1000) : new Date(b.reportDate);
+    return dateB.getTime() - dateA.getTime();
+  });
   const [userNameMap, setUserNameMap] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState("");
   const [duration, setDuration] = useState("day");
