@@ -77,9 +77,9 @@ export default function ProfilePage() {
                 name="name"
                 placeholder="Your Name"
                 value={form.name}
-                onChange={handleChange}
+                readOnly
                 required
-                className="mt-1"
+                className="mt-1 bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
               />
             </div>
             <div>
