@@ -51,7 +51,7 @@ export default function ProfilePage() {
       {/* Show user role at the top */}
       {profile && (
         <div className="mb-4 px-4 py-2 rounded-lg font-semibold text-primary bg-card shadow border border-border">
-          You are logged in as <span style={{ textTransform: 'capitalize' }}>{profile.role}</span>
+          You are logged in as <span>{profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}</span>
         </div>
       )}
       <Card className="w-full max-w-xs sm:max-w-md md:max-w-lg bg-gradient-to-br from-white via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 text-card-foreground shadow-2xl border-2 border-blue-100 dark:border-blue-900 rounded-3xl p-0">

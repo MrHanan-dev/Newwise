@@ -9,7 +9,7 @@ export interface UserProfile {
   name: string;
   company: string;
   category: string;
-  role: 'technician' | 'operator'; // <-- Added role field
+  role: string; // Allow any role from backend
 }
 
 interface UserProfileContextType {
@@ -62,6 +62,8 @@ export const UserProfileProvider = ({ children }: { children: ReactNode }) => {
             console.error('[UserProfileProvider] Error setting name in Firestore:', err);
           }
         }
+        // Debug log for role
+        console.log('[UserProfileProvider] Fetched role from Firestore:', data.role);
         profileData = {
           name,
           company: data.company || "",

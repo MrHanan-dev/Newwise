@@ -350,8 +350,8 @@ export default function DashboardPage() {
       {/* Role badge */}
       {userProfile && (
         <div className="mb-4 flex items-center gap-3">
-          <span className={`inline-block px-4 py-1 rounded-full font-semibold text-sm shadow bg-card border border-border ${userProfile.role === 'operator' ? 'text-core-bright bg-neutral-verylight' : 'text-secondary-green bg-neutral-verylight'}`}> 
-            {userProfile.role === 'operator' ? 'Operator' : 'Technician'}
+          <span className="inline-block px-4 py-1 rounded-full font-semibold text-sm shadow bg-card border border-border text-core-bright bg-neutral-verylight">
+            {userProfile.role.charAt(0).toUpperCase() + userProfile.role.slice(1)}
           </span>
           <span className="text-muted-foreground">Welcome, {userProfile.name || user.email}!</span>
         </div>

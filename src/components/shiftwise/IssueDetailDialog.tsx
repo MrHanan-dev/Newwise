@@ -62,7 +62,7 @@ interface IssueDetailDialogProps {
   onOpenChange: (open: boolean) => void; // Callback to close dialog
   // Add callback for when an issue is updated
   onIssueUpdated?: (updatedIssue: DisplayIssue) => void;
-  userRole: 'technician' | 'operator'; // <-- Add userRole prop
+  userRole: string; // Allow any role
 }
 
 // ===============================
