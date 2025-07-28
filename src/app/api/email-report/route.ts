@@ -1,503 +1,349 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { jsPDF } from 'jspdf';
-import fetch from 'node-fetch';
+import puppeteer from 'puppeteer';
+import logoSvg from './logoSvg'
+import tetraPakLogoSvg from './tetraPakLogoSvg'
 
-// Main API handler
+// Main API handler - optimized for immediate response
 export async function POST(request: Request) {
   try {
-    const { reports } = await request.json();
-    
+    const { reports, userInfo } = await request.json();
     if (!reports || !reports.length) {
       return NextResponse.json({ error: 'No reports provided' }, { status: 400 });
     }
+
+    // Return immediate success response
+    const response = NextResponse.json({ success: true, message: 'Report generation started' });
     
-    try {
-      // Generate PDF
-      console.log("Generating PDF...");
-      const pdfBuffer = await generatePDF(reports);
-      console.log("PDF generated successfully");
-      
-      // Send email with PDF attachment
-      console.log("Sending email...");
-      await sendEmail(pdfBuffer);
-      console.log("Email sent successfully");
-      
-      return NextResponse.json({ success: true });
-    } catch (error) {
-      console.error("Specific error in PDF generation or email sending:", error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return NextResponse.json({ 
-        error: 'Failed in PDF generation or email sending', 
-        details: errorMessage 
-      }, { status: 500 });
-    }
+    // Process PDF and email in background (non-blocking)
+    setImmediate(async () => {
+      try {
+        console.log("Starting background PDF generation...");
+        const pdfBuffer = await generatePDFWithPuppeteer(reports, userInfo);
+        console.log("PDF generated successfully");
+        
+        console.log("Sending email...");
+        await sendEmail(pdfBuffer, userInfo);
+        console.log("Email sent successfully");
+      } catch (error) {
+        console.error("Background processing error:", error);
+      }
+    });
+
+    return response;
   } catch (error) {
     console.error("General error handling request:", error);
     return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
   }
 }
 
-// Helper function to fetch image as base64
-async function fetchImageAsBase64(url: string): Promise<string | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error(`Error fetching image: ${response.statusText}`);
-      return null;
-    }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    
-    // Use Buffer for server-side base64 encoding
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-    
-    // Determine image format from URL or Content-Type header
-    let imageFormat = 'JPEG'; // Default format
-    const contentType = response.headers.get('content-type');
-    
-    if (contentType?.includes('png')) {
-      imageFormat = 'PNG';
-    } else if (contentType?.includes('gif')) {
-      imageFormat = 'GIF';
-    } else if (url.toLowerCase().endsWith('.png')) {
-      imageFormat = 'PNG';
-    } else if (url.toLowerCase().endsWith('.gif')) {
-      imageFormat = 'GIF';
-    }
-    
-    return `data:image/${imageFormat.toLowerCase()};base64,${base64}`;
-  } catch (error) {
-    console.error('Error fetching image:', error);
-    return null;
-  }
-}
 
-// Process all photos and add them to issues
-async function processAllPhotos(reports: any[]) {
-  for (const report of reports) {
-    if (report.issues && Array.isArray(report.issues)) {
-      for (const issue of report.issues) {
-        if (issue.photos && Array.isArray(issue.photos)) {
-          // Process each photo
-          const processedPhotos = [];
-          for (let i = 0; i < issue.photos.length; i++) {
-            const photoUrl = issue.photos[i];
-            if (photoUrl && typeof photoUrl === 'string') {
-              try {
-                const imageData = await fetchImageAsBase64(photoUrl);
-                processedPhotos.push({ 
-                  index: i, 
-                  photoUrl, 
-                  imageData, 
-                  success: !!imageData 
-                });
-              } catch (error) {
-                console.error(`Error fetching image ${i}:`, error);
-                processedPhotos.push({ 
-                  index: i, 
-                  photoUrl, 
-                  imageData: null, 
-                  success: false 
-                });
-              }
-            } else {
-              processedPhotos.push({ 
-                index: i, 
-                photoUrl: null, 
-                imageData: null, 
-                success: false 
-              });
-            }
-          }
-          issue.processedPhotos = processedPhotos;
-        }
-      }
-    }
-  }
-}
 
-// Generate PDF from report data
-async function generatePDF(reports: any[]) {
+// Generate PDF using Puppeteer with ultra-fast settings
+async function generatePDFWithPuppeteer(reports: any[], userInfo?: any) {
+  const browser = await puppeteer.launch({ 
+    headless: true, 
+    args: [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-extensions',
+      '--disable-plugins',
+      '--disable-images',
+      '--disable-javascript',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-translate',
+      '--hide-scrollbars',
+      '--mute-audio',
+      '--no-default-browser-check',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor'
+    ] 
+  });
+  
   try {
-    // First, process all photos before creating the PDF
-    await processAllPhotos(reports);
+    const page = await browser.newPage();
     
-    // Create a new jsPDF document (A4 portrait)
-    const doc = new jsPDF();
+    // Ultra-fast page settings
+    await page.setViewport({ width: 800, height: 600 });
+    await page.setCacheEnabled(false);
+    await page.setJavaScriptEnabled(false);
     
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
-    let y = margin;
+    // Create HTML content
+    const htmlContent = generateHTMLContent(reports, userInfo);
     
-    // Function to check if we need a new page
-    function checkForNewPage(height: number) {
-      if (y + height > pageHeight - margin) {
-        doc.addPage();
-        y = margin;
-        return true;
-      }
-      return false;
-    }
-    
-    // Add header with title
-    doc.setFontSize(24);
-    doc.setTextColor(30, 64, 175); // #1e40af in RGB
-    doc.setFont("helvetica", "bold");
-    
-    // Center text
-    const titleText = "ShiftWise";
-    const titleWidth = doc.getStringUnitWidth(titleText) * doc.getFontSize() / doc.internal.scaleFactor;
-    doc.text(titleText, (pageWidth - titleWidth) / 2, y);
-    y += 10;
-    
-    // Subtitle
-    doc.setFontSize(16);
-    const subtitleText = "Daily Issue Report";
-    const subtitleWidth = doc.getStringUnitWidth(subtitleText) * doc.getFontSize() / doc.internal.scaleFactor;
-    doc.text(subtitleText, (pageWidth - subtitleWidth) / 2, y);
-    y += 10;
-    
-    // Date
-    doc.setFontSize(12);
-    doc.setTextColor(75, 85, 99); // #4b5563 in RGB
-    doc.setFont("helvetica", "normal");
-    
-    const dateText = `Report Date: ${new Date().toLocaleDateString()}`;
-    const dateWidth = doc.getStringUnitWidth(dateText) * doc.getFontSize() / doc.internal.scaleFactor;
-    doc.text(dateText, (pageWidth - dateWidth) / 2, y);
-    y += 20;
-    
-    // Group by status for summary
-    const statusCounts: Record<string, number> = {};
-    let totalIssues = 0;
-    
-    reports.forEach(report => {
-      if (report.issues && Array.isArray(report.issues)) {
-        report.issues.forEach((issue: any) => {
-          statusCounts[issue.status] = (statusCounts[issue.status] || 0) + 1;
-          totalIssues++;
-        });
-      }
+    // Set content with minimal waiting
+    await page.setContent(htmlContent, { 
+      waitUntil: 'load', 
+      timeout: 5000 
     });
     
-    // Summary section
-    doc.setTextColor(30, 64, 175);
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("Summary", margin, y);
-    y += 8;
-    
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Total Issues: ${totalIssues}`, margin, y);
-    y += 6;
-    
-    // Status counts
-    Object.entries(statusCounts).forEach(([status, count]) => {
-      const rgbColor = getStatusColorRGB(status);
-      doc.setTextColor(rgbColor.r, rgbColor.g, rgbColor.b);
-      doc.text(`${status}: ${count} issue${count !== 1 ? 's' : ''}`, margin, y);
-      y += 6;
-    });
-    y += 10;
-    
-    // Detailed issues
-    doc.setTextColor(30, 64, 175);
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("Detailed Issues", margin, y);
-    y += 15;
-    
-    // Process each report
-    reports.forEach((report, reportIndex) => {
-      if (reportIndex > 0) {
-        doc.addPage();
-        y = margin;
-      }
-      
-      // Submitter info
-      doc.setTextColor(75, 85, 99); // Gray
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "normal");
-      
-      if (report.submittedBy) {
-        doc.text(`Submitted by: ${report.submittedBy}`, margin, y);
-        y += 6;
-      }
-      
-      if (report.reportDate) {
-        const date = report.reportDate.seconds ? 
-          new Date(report.reportDate.seconds * 1000) : 
-          new Date(report.reportDate);
-        
-        doc.text(`Report Date: ${date.toLocaleDateString()}`, margin, y);
-        y += 6;
-      }
-      
-      y += 5;
-      
-      // Process issues in this report
-      if (report.issues && Array.isArray(report.issues)) {
-        report.issues.forEach((issue: any, issueIndex: number) => {
-          // Check if we need a new page
-          if (checkForNewPage(100)) { // Estimate height needed for issue
-            // Reset y position for new page
-            y = margin;
-          }
-          
-          // Draw a gray line to separate issues
-          doc.setDrawColor(229, 231, 235); // #e5e7eb
-          doc.setLineWidth(0.5);
-          doc.line(margin, y, pageWidth - margin, y);
-          y += 5;
-          
-          // Issue number and status
-          doc.setFontSize(14);
-          doc.setTextColor(30, 64, 175); // Blue
-          doc.setFont("helvetica", "bold");
-          doc.text(`Issue #${issueIndex + 1}`, margin, y);
-          
-          // Status with color
-          const statusRGB = getStatusColorRGB(issue.status);
-          doc.setTextColor(statusRGB.r, statusRGB.g, statusRGB.b);
-          doc.setFontSize(12);
-          doc.setFont("helvetica", "normal");
-          
-          const statusText = `[${issue.status || 'No Status'}]`;
-          const statusWidth = doc.getStringUnitWidth(statusText) * doc.getFontSize() / doc.internal.scaleFactor;
-          doc.text(statusText, pageWidth - margin - statusWidth, y);
-          y += 8;
-          
-          // Title
-          if (issue.issue) {
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "bold");
-            
-            // Handle long titles by wrapping text
-            const titleLines = doc.splitTextToSize(issue.issue, pageWidth - 2 * margin);
-            doc.text(titleLines, margin, y);
-            y += titleLines.length * 7;
-          }
-          
-          // PMUN if available
-          if (issue.pmun) {
-            doc.setTextColor(75, 85, 99);
-            doc.setFontSize(11);
-            doc.setFont("helvetica", "normal");
-            doc.text(`PMUN: ${issue.pmun}`, margin, y);
-            y += 6;
-          }
-          
-          // Description
-          if (issue.description) {
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(11);
-            doc.setFont("helvetica", "bold");
-            doc.text("Description:", margin, y);
-            y += 6;
-            
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(55, 65, 81); // #374151
-            
-            // Split long descriptions into multiple lines to fit page width
-            const descriptionLines = doc.splitTextToSize(issue.description, pageWidth - 2 * margin);
-            
-            // Check if description needs a new page
-            if (checkForNewPage(descriptionLines.length * 5)) {
-              y = margin;
-            }
-            
-            doc.text(descriptionLines, margin, y);
-            y += descriptionLines.length * 5 + 5;
-          }
-          
-          // Actions if available
-          if (issue.actions) {
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(11);
-            doc.setFont("helvetica", "bold");
-            doc.text("Actions:", margin, y);
-            y += 6;
-            
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(55, 65, 81);
-            
-            const actionLines = doc.splitTextToSize(issue.actions, pageWidth - 2 * margin);
-            
-            // Check if actions need a new page
-            if (checkForNewPage(actionLines.length * 5)) {
-              y = margin;
-            }
-            
-            doc.text(actionLines, margin, y);
-            y += actionLines.length * 5 + 5;
-          }
-          
-          // Photos
-          if (issue.processedPhotos && issue.processedPhotos.length > 0) {
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(11);
-            doc.setFont("helvetica", "bold");
-            doc.text("Photos:", margin, y);
-            y += 6;
-            
-            // First show the count
-            doc.setFont("helvetica", "italic");
-            doc.setTextColor(107, 114, 128); // #6b7280
-            doc.text(`${issue.processedPhotos.length} photo(s) attached to this issue:`, margin, y);
-            y += 10;
-            
-            // Use pre-fetched image data
-            for (const result of issue.processedPhotos) {
-              // Check if we need a new page for the image
-              if (y > pageHeight - 100) {
-                doc.addPage();
-                y = margin;
-              }              if (result.success && result.imageData) {
-                // Calculate dimensions to fit within margins
-                const maxWidth = pageWidth - (2 * margin);
-                const maxHeight = 300; // Maximum height for an image
-                
-                try {
-                  // Simple approach for maintaining natural proportions - set width only
-                  const imgWidth = maxWidth * 0.85; // 85% of available width for margins
-                  
-                  // Get image format from the data URL to use in addImage
-                  let format = 'JPEG';
-                  if (result.imageData.includes('image/png')) {
-                    format = 'PNG';
-                  } else if (result.imageData.includes('image/gif')) {
-                    format = 'GIF';
-                  }
-                  
-                  // We'll try to detect image type and handle it accordingly
-                  // The key fix: we're only specifying width, no height (let jsPDF handle proportions)
-                  // First try with undefined height which preserves aspect ratio if supported by jsPDF version
-                  try {
-                    doc.addImage(
-                      result.imageData, 
-                      format, 
-                      margin + (maxWidth - imgWidth) / 2, // Center horizontally
-                      y,
-                      imgWidth,
-                      0, // When height is 0, jsPDF auto-calculates to preserve ratio
-                      `img-${issue.id || 'photo'}-${result.index}`,
-                      'MEDIUM'
-                    );
-                    
-                    // Estimate height for y position based on data analysis
-                    // Look at the data URL length as rough indicator of dimensions
-                    const base64Length = result.imageData.length;
-                    // Calculate an estimated aspect ratio from the data size
-                    // Most photos are landscape orientation (3:2 or 4:3), 
-                    // but we'll be conservative with spacing
-                    const estimatedImgHeight = base64Length > 10000 ? imgWidth * 0.7 : imgWidth * 0.6;
-                    const actualHeight = Math.min(estimatedImgHeight, maxHeight);
-                    y += actualHeight + 20; // Add some generous space
-                  } catch (aspectRatioError) {
-                    // Fallback to explicit dimensions for older jsPDF versions
-                    // Use a reasonable default aspect ratio that works with most photos
-                    const estimatedHeight = imgWidth * 0.7; // Conservative 10:7 ratio
-                    
-                    doc.addImage(
-                      result.imageData,
-                      format,
-                      margin + (maxWidth - imgWidth) / 2,
-                      y,
-                      imgWidth,
-                      estimatedHeight,
-                      `img-${issue.id || 'photo'}-${result.index}`,
-                      'MEDIUM',
-                      0
-                    );
-                    
-                    y += estimatedHeight + 20; // Add some generous space
-                  }
-                  
-                  // Add a small indicator showing this is a photo
-                  doc.setFontSize(8);
-                  doc.setTextColor(120, 120, 120);
-                  doc.setFont('helvetica', 'italic');
-                  doc.text(`Photo #${result.index + 1}`, margin + 5, y - 10);
-                  
-                  // Add a little separation between images
-                  y += 5;
-                } catch (addError) {
-                  console.error('Error adding image to PDF:', addError);
-                  doc.setFont("helvetica", "italic");
-                  doc.setTextColor(239, 68, 68); // Red
-                  doc.text(`[Error embedding image]`, margin, y);
-                  y += 6;
-                }
-              } else {
-                doc.setFont("helvetica", "italic");
-                doc.setTextColor(239, 68, 68); // Red
-                const displayUrl = result.photoUrl ? result.photoUrl.substring(0, 40) + '...' : '[missing URL]';
-                doc.text(`[Could not load image: ${displayUrl}]`, margin, y);
-                y += 6;
-              }
-            }
-          }
-          // Handle cases where we don't have pre-processed photos but do have photo URLs
-          else if (issue.photos && Array.isArray(issue.photos) && issue.photos.length > 0) {
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(11);
-            doc.setFont("helvetica", "bold");
-            doc.text("Photos:", margin, y);
-            y += 6;
-            
-            doc.setFont("helvetica", "italic");
-            doc.setTextColor(107, 114, 128); // #6b7280
-            doc.text(`${issue.photos.length} photo(s) attached to this issue. (Not embedded)`, margin, y);
-            y += 5;
-          }
-          
-          y += 10; // Extra space between issues
-        });
-      }
+    // Generate PDF with minimal settings
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '10px', right: '10px', bottom: '10px', left: '10px' },
+      preferCSSPageSize: false,
+      displayHeaderFooter: false,
+      scale: 0.8
     });
     
-    // Add page numbers
-    const totalPages = doc.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(10);
-      doc.setTextColor(107, 114, 128); // #6b7280
-      doc.setFont("helvetica", "normal");
-      
-      const pageText = `Page ${i} of ${totalPages}`;
-      const pageTextWidth = doc.getStringUnitWidth(pageText) * doc.getFontSize() / doc.internal.scaleFactor;
-      doc.text(pageText, (pageWidth - pageTextWidth) / 2, pageHeight - 10);
-    }
-    
-    // Get PDF as buffer
-    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
     return pdfBuffer;
-    
-  } catch (error) {
-    console.error("Error generating PDF:", error);
-    throw error;
+  } finally {
+    await browser.close();
   }
 }
 
-// Helper function to get status color
-function getStatusColorRGB(status?: string) {
-  switch (status?.toLowerCase()) {
-    case 'open': return { r: 239, g: 68, b: 68 }; // red
-    case 'in progress': return { r: 245, g: 158, b: 11 }; // amber
-    case 'completed': return { r: 16, g: 185, b: 129 }; // green
-    case 'escalated': return { r: 139, g: 92, b: 246 }; // purple
-    default: return { r: 107, g: 114, b: 128 }; // gray
-  }
+// Generate HTML content for the PDF
+function generateHTMLContent(reports: any[], userInfo?: any) {
+  // Calculate summary statistics
+  const statusCounts: Record<string, number> = {};
+  let totalIssues = 0;
+  reports.forEach(report => {
+    if (report.issues && Array.isArray(report.issues)) {
+      report.issues.forEach((issue: any) => {
+        statusCounts[issue.status] = (statusCounts[issue.status] || 0) + 1;
+        totalIssues++;
+      });
+    }
+  });
+  
+  const currentDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const userName = userInfo?.name || 'Site Maintenance Team';
+  const isPersonalReport = userInfo?.reportType === 'my-issues';
+  
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${isPersonalReport ? 'ShiftWise Personal Report' : 'ShiftWise Daily Report'}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Computer Modern', 'Latin Modern Roman', 'Times New Roman', Times, serif; line-height: 1.6; color: #000; background: #ffffff; font-size: 12pt; text-align: justify; }
+        .container { max-width: 210mm; margin: 0 auto; padding: 25mm; min-height: 297mm; }
+        .header { text-align: center; margin-bottom: 30pt; padding-bottom: 20pt; border-bottom: 2px solid #e5e7eb; background: #f8fafc; border-radius: 0 0 18px 18px; box-shadow: 0 4px 24px rgba(0,0,0,0.04); }
+        .logo-container { margin-bottom: 18pt; }
+        .logo-container svg { max-width: 140px; height: auto; margin: 0 auto; display: block; filter: drop-shadow(0 2px 8px #b6c6e2); }
+        .report-title { font-size: 32pt; font-weight: bold; color: #bfa14a; letter-spacing: 1.5pt; font-family: 'Georgia', 'Times New Roman', Times, serif; margin-bottom: 8pt; text-transform: uppercase; }
+        .report-subtitle { font-size: 16pt; font-style: italic; color: #22223b; margin-bottom: 6pt; font-family: 'Georgia', 'Times New Roman', Times, serif; }
+        .report-date, .prepared-by { font-size: 12pt; color: #555; margin-bottom: 0; font-family: 'Georgia', 'Times New Roman', Times, serif; }
+        .prepared-by { margin-top: 2pt; margin-bottom: 0; }
+        .header-divider { width: 60%; margin: 24pt auto 0 auto; border: none; border-top: 2px solid #e5e7eb; }
+        
+        /* LaTeX-inspired Header */
+        .header h1 { font-size: 30pt; font-weight: bold; margin-bottom: 12pt; letter-spacing: 1pt; font-variant: small-caps; color: #c19b2aff }
+        .header h2 { font-size: 18pt; font-weight: normal; margin-bottom: 8pt; font-style: italic; }
+        .header .date { font-size: 12pt; font-style: italic; }
+        .header .prepared-by { font-size: 12pt; margin-top: 10pt; text-align: right; }
+        
+        /* LaTeX-style Section Headers */
+        .section-header { font-size: 16pt; font-weight: bold; margin-top: 24pt; margin-bottom: 12pt; font-variant: small-caps; }
+        .subsection-header { font-size: 14pt; font-weight: bold; margin-top: 20pt; margin-bottom: 10pt; font-style: italic; }
+        
+        /* Executive Summary - Dark Blue Theme */
+        .executive-summary { background: #e6f3ff; border: 2pt solid #1e3a8a; padding: 16pt; margin-bottom: 24pt; border-radius: 4pt; box-shadow: 0 2pt 4pt rgba(0,0,0,0.1); }
+        .executive-summary h3 { font-size: 14pt; font-weight: bold; margin-bottom: 12pt; background: #1e3a8a; color: white; padding: 8pt; margin: -16pt -16pt 12pt -16pt; border-radius: 2pt 2pt 0 0; font-variant: small-caps; }
+        .executive-summary p { margin-bottom: 8pt; text-align: justify; text-indent: 1.5em; }
+        
+        /* Summary Table - Dark Blue Theme */
+        .summary-table { width: 100%; border-collapse: collapse; margin: 20pt 0; font-size: 11pt; border: 2pt solid #1e3a8a; background: #e6f3ff; box-shadow: 0 2pt 4pt rgba(0,0,0,0.1); }
+        .summary-table th, .summary-table td { border: 1pt solid #1e3a8a; padding: 8pt; text-align: left; vertical-align: top; }
+        .summary-table th { background: #1e3a8a; color: white; font-weight: bold; font-variant: small-caps; }
+        .summary-table caption { font-weight: bold; margin-bottom: 8pt; text-align: left; font-variant: small-caps; font-size: 13pt; }
+        
+        /* Status Colors */
+        .status-completed { background-color: #22c55e !important; color: white !important; font-weight: bold; text-align: center; border-radius: 2pt; padding: 4pt; }
+        .status-in-progress { background-color: #fbbf24 !important; color: #000 !important; font-weight: bold; text-align: center; border-radius: 2pt; padding: 4pt; }
+        .status-open { background-color: #ed5050ff !important; color: #000 !important; font-weight: bold; text-align: center; border-radius: 2pt; padding: 4pt; }
+        
+        /* Issue Cards - Dark Green Theme */
+        .issue-card { margin-bottom: 24pt; page-break-inside: avoid; border: 2pt solid #166534; border-radius: 4pt; background: #f0fdf4; box-shadow: 0 2pt 4pt rgba(0,0,0,0.1); overflow: hidden; }
+        .issue-title { font-size: 13pt; font-weight: bold; margin-bottom: 0; background: #166534; color: white; padding: 12pt; font-variant: small-caps; }
+        .issue-meta { font-size: 10pt; color: #374151; margin-bottom: 16pt; padding: 8pt 12pt 0 12pt; font-style: italic; }
+        .issue-content { padding: 0 12pt 12pt 12pt; }
+        .field-group { margin-bottom: 12pt; }
+        .field-label { font-weight: bold; margin-bottom: 4pt; font-variant: small-caps; }
+        .field-value { margin-left: 20pt; text-align: justify; text-indent: 1.5em; }
+        .pmun { font-family: 'Courier New', monospace; background-color: #f5f5f5; padding: 4pt 8pt; border: 1pt solid #ccc; border-radius: 2pt; font-size: 10pt; }
+        
+        /* Bullet Points */
+        .bullet-list { margin-left: 20pt; margin-bottom: 12pt; }
+        .bullet-list li { margin-bottom: 4pt; text-align: justify; }
+        
+        /* Photos Section */
+        .photos-section { margin-top: 16pt; page-break-inside: avoid; }
+        .photos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200pt, 1fr)); gap: 12pt; margin-top: 12pt; }
+        .photo-item { text-align: center; page-break-inside: avoid; }
+        .photo-item img { max-width: 100%; height: auto; border: 1pt solid #000; margin-bottom: 8pt; }
+        .photo-caption { font-size: 10pt; font-style: italic; text-align: center; }
+        
+        /* Footer */
+        .report-footer { margin-top: 24pt; padding-top: 12pt; border-top: 1pt solid #000; font-size: 10pt; text-align: center; }
+        
+        /* Recommendations - Dark Blue Theme */
+        .recommendations { background: #e6f3ff; border: 2pt solid #1e3a8a; padding: 16pt; margin: 20pt 0; border-radius: 4pt; box-shadow: 0 2pt 4pt rgba(0,0,0,0.1); }
+        .recommendations h4 { font-size: 12pt; font-weight: bold; margin-bottom: 8pt; font-variant: small-caps; }
+        
+        /* LaTeX-style theorem/definition boxes */
+        .theorem-box { border: 1pt solid #000; margin: 12pt 0; padding: 12pt; background: #f9f9f9; }
+        .theorem-title { font-weight: bold; font-style: italic; margin-bottom: 8pt; }
+        
+        /* Print Styles */
+        @media print { .container { margin: 0; padding: 20mm; } .issue-card { page-break-inside: avoid; } .photos-section { page-break-inside: avoid; } .executive-summary, .summary-table, .recommendations { break-inside: avoid; } }
+        
+        /* Additional LaTeX-inspired typography */
+        h1, h2, h3, h4, h5, h6 { font-family: 'Computer Modern', 'Latin Modern Roman', 'Times New Roman', Times, serif; }
+        
+        /* Hyperlink styling */
+        a { color: #1e3a8a; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        
+        .logo-container svg { max-width: 100%; max-height: 150px; width: auto; height: auto; }
+        
+        /* Math-like spacing */
+        .math-spacing { letter-spacing: 0.5pt; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <!-- Header -->
+        <div class="header">
+          <div class="logo-container">
+            ${logoSvg}
+          </div>
+          <div class="report-title">${isPersonalReport ? 'Personal Issue Report' : 'Daily Issue Report'}</div>
+          <div class="report-subtitle">ShiftWise ${isPersonalReport ? 'Individual Activity' : 'Daily Issue'} Report</div>
+          <div class="report-date">Date: ${currentDate}</div>
+          <div class="prepared-by">Prepared By: ${userName}</div>
+          <hr class="header-divider" />
+        </div>
+        
+        <!-- Executive Summary -->
+        <div class="executive-summary">
+          <h3>Executive Summary</h3>
+          <p>This report documents the ${isPersonalReport ? 'personal troubleshooting and maintenance activities carried out by ' + userName : 'on-site troubleshooting and maintenance activities carried out across various stations and equipment'} during the ${isPersonalReport ? 'selected time period' : 'daily shift operations'}. A total of ${totalIssues} issues were identified and addressed, with ${reports.length} detailed reports submitted${isPersonalReport ? '' : ' by the maintenance team'}.</p>
+          <p>The issues ranged from routine maintenance tasks to critical equipment failures, all of which were systematically addressed according to standard operating procedures. This comprehensive report provides detailed documentation of each issue, actions taken, and current status for ${isPersonalReport ? 'personal review' : 'management review'} and future reference.</p>
+        </div>
+        
+        <!-- Summary Table -->
+        <table class="summary-table">
+          <caption>Table 1: Overview of ${isPersonalReport ? 'Personal' : ''} Issues and Resolutions</caption>
+          <thead>
+            <tr>
+              <th>Station/Line</th>
+              <th>Issue Title</th>
+              <th>Quick Resolution</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${reports.map((report, reportIndex) => report.issues && Array.isArray(report.issues) ? report.issues.map((issue: any, issueIndex: any) => `
+              <tr>
+                <td>${issue.pmun || `Station ${reportIndex + 1}`}</td>
+                <td>${issue.issue || 'Untitled Issue'}</td>
+                <td>${issue.actions || 'See detailed report'}</td>
+                <td class="status-${issue.status?.toLowerCase().replace(' ', '-') || 'open'}">
+                  ${issue.status || 'Open'}
+                </td>
+              </tr>
+            `).join('') : '' ).join('')}
+          </tbody>
+        </table>
+        
+        <!-- Detailed Issues Section -->
+        <div class="section-header">1 ${isPersonalReport ? 'Personal ' : ''}Faults and Resolutions</div>
+        ${reports.map((report, reportIndex) => report.issues && Array.isArray(report.issues) ? report.issues.map((issue: any, issueIndex: any) => `
+          <div class="issue-card">
+            <div class="issue-title">
+              ${issue.status === 'Resolved' || issue.status === 'Completed' ? 'Resolved' : 'Issue'}: ${reportIndex + 1}.${issueIndex + 1} - ${issue.issue || 'Untitled Issue'}
+              ${issue.pmun ? ` (${issue.pmun})` : ''}
+            </div>
+            <div class="issue-meta">
+              Issue #${reportIndex + 1}-${issueIndex + 1} | Status: <span class="status-${issue.status?.toLowerCase().replace(' ', '-') || 'open'}">${issue.status || 'Open'}</span> | Submitted by: ${report.submittedBy || 'Unknown'} | Date: ${report.reportDate ? new Date(report.reportDate).toLocaleDateString() : 'Unknown'}
+            </div>
+            <div class="issue-content">
+              ${issue.description ? `
+                <div class="field-group">
+                  <div class="field-label">• Fault:</div>
+                  <div class="field-value">${issue.description}</div>
+                </div>
+              ` : ''}
+              ${issue.actions ? `
+                <div class="field-group">
+                  <div class="field-label">• Action Taken:</div>
+                  <div class="field-value">${issue.actions}</div>
+                </div>
+              ` : ''}
+              ${issue.status === 'Resolved' || issue.status === 'Completed' ? `
+                <div class="field-group">
+                  <div class="field-label">• Outcome:</div>
+                  <div class="field-value">Issue successfully resolved and equipment returned to normal operation.</div>
+                </div>
+              ` : ''}
+              
+              ${issue.photos && Array.isArray(issue.photos) && issue.photos.length > 0 ? `
+                <div class="photos-section">
+                  <div class="field-label">Attached Documentation (${issue.photos.length} images):</div>
+                  <div class="photos-grid">
+                    ${issue.photos.map((photo: any, photoIndex: any) => `
+                      <div class="photo-item">
+                        <img src="${photo}" alt="Documentation photo ${photoIndex + 1}" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                        <div class="photo-caption" style="display:none;">Image unavailable</div>
+                        <div class="photo-caption">Figure ${reportIndex + 1}.${issueIndex + 1}.${photoIndex + 1}: {Description}</div>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `).join('') : '' ).join('')}
+        
+        <!-- Conclusion and Recommendations -->
+        <div class="section-header">2 Conclusion and Recommendations</div>
+        
+        <div class="recommendations">
+          <h4>Summary:</h4>
+          <ul class="bullet-list">
+            <li>All identified critical issues were successfully addressed during the ${isPersonalReport ? 'period' : 'shift'}.</li>
+            <li>Total issues resolved: ${reports.reduce((total, report) => total + (report.issues?.filter((issue: any) => issue.status === 'Resolved' || issue.status === 'Completed')?.length || 0), 0)}</li>
+            <li>Issues requiring follow-up: ${reports.reduce((total, report) => total + (report.issues?.filter((issue: any) => issue.status === 'Open' || issue.status === 'In Progress')?.length || 0), 0)}</li>
+          </ul>
+          
+          <h4>${isPersonalReport ? 'Personal ' : ''}Recommendations:</h4>
+          <ul class="bullet-list">
+            <li>Continue monitoring equipment performance and conducting regular preventive maintenance.</li>
+            <li>Ensure all maintenance activities are properly documented and logged in the system.</li>
+            <li>Review and update maintenance schedules based on recurring issues identified in this report.</li>
+            <li>Provide additional training to operators on early fault detection and reporting procedures.</li>
+          </ul>
+        </div>
+        
+        <!-- Footer -->
+        <div class="report-footer">
+          <p>This report was automatically generated by ShiftWise maintenance management system.</p>
+          <p>Generated on ${new Date().toLocaleString()}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
 }
 
-// Send email with PDF attachment
-async function sendEmail(pdfBuffer: Buffer) {
-  // Create a nodemailer transporter
+// Send email with PDF attachment - optimized for speed
+async function sendEmail(pdfBuffer: Buffer | Uint8Array, userInfo: any) {
+  // Create a nodemailer transporter with optimized settings
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.example.com',
     port: parseInt(process.env.EMAIL_PORT || '587'),
@@ -506,32 +352,132 @@ async function sendEmail(pdfBuffer: Buffer) {
       user: process.env.EMAIL_USER || 'user@example.com',
       pass: process.env.EMAIL_PASSWORD || 'password',
     },
+    // Optimize for speed
+    socketTimeout: 10000,
+    connectionTimeout: 10000,
+    greetingTimeout: 5000
   });
-  
+
   const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
+  const userName = userInfo?.name || 'Team Member';
+  const isPersonalReport = userInfo?.reportType === 'my-issues';
+  
+  // Debug logging
+  console.log('Email Debug Info:');
+  console.log('- isPersonalReport:', isPersonalReport);
+  console.log('- userInfo?.email:', userInfo?.email);
+  console.log('- process.env.EMAIL_RECIPIENT:', process.env.EMAIL_RECIPIENT);
+  console.log('- userInfo?.reportType:', userInfo?.reportType);
+  
+  // Determine recipient based on report type
+  const emailRecipient = isPersonalReport 
+    ? (userInfo?.email || process.env.EMAIL_RECIPIENT || 'recipient@example.com')
+    : (process.env.EMAIL_RECIPIENT || 'recipient@example.com');
+  
+  console.log('- Email will be sent to:', emailRecipient);
+  console.log('- Report type:', isPersonalReport ? 'Personal (My Issues)' : 'All Issues');
   
   // Setup email data
   const mailOptions = {
     from: process.env.EMAIL_FROM || 'ShiftWise <shiftwise@example.com>',
-    to: process.env.EMAIL_RECIPIENT || 'recipient@example.com',
-    subject: `ShiftWise Daily Issue Report - ${dateStr}`,
-    text: 'Please find attached the daily issues report.',
+    to: isPersonalReport 
+      ? [userInfo?.email, process.env.EMAIL_RECIPIENT].filter(Boolean).join(',')
+      : (process.env.EMAIL_RECIPIENT || 'recipient@example.com'),
+    subject: isPersonalReport 
+      ? `ShiftWise Personal Issue Report - ${dateStr}`
+      : `ShiftWise Daily Issue Report - ${dateStr}`,
+    text: isPersonalReport 
+      ? `Dear ${userName},\n\nPlease find attached your personal issues report for ${dateStr}.\n\nBest regards,\nShiftWise Team`
+      : `Please find attached the daily issues report for ${dateStr}.\n\nBest regards,\nShiftWise Team`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1e40af; text-align: center; margin-top: 30px;">ShiftWise Daily Report</h2>
-        <p>Please find attached the daily issues report for ${dateStr}.</p>
-        <p>This report was automatically generated by ShiftWise and includes all issues reported in the last 24 hours.</p>
-        <p style="margin-top: 30px; color: #6b7280;">This is an automated email, please do not reply.</p>
-      </div>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>ShiftWise Report</title>
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8fafc;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">ShiftWise</h1>
+            <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 16px;">Maintenance Management System</p>
+          </div>
+          
+          <!-- Content -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 24px; font-weight: 600;">
+              ${isPersonalReport ? 'Personal Issue Report' : 'Daily Issue Report'}
+            </h2>
+            
+            ${isPersonalReport ? `
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Dear <strong style="color: #1e293b;">${userName}</strong>,
+              </p>
+            ` : ''}
+            
+            <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              Please find attached the ${isPersonalReport ? 'personal ' : ''}issues report for <strong style="color: #1e293b;">${dateStr}</strong>. 
+              ${isPersonalReport 
+                ? 'This report contains all issues that you have created, logged, or resolved during the selected time period.'
+                : 'This report contains all issues reported during the selected time period.'
+              }
+            </p>
+            
+            <div style="background-color: #f1f5f9; border-left: 4px solid #3b82f6; padding: 20px; margin: 30px 0; border-radius: 0 8px 8px 0;">
+              <h3 style="color: #1e293b; margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">Report Summary</h3>
+              <ul style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                ${isPersonalReport ? `
+                  <li>Personal issues created and logged</li>
+                  <li>Issues you have resolved or updated</li>
+                ` : `
+                  <li>All issues reported during the period</li>
+                  <li>Issues across all stations and equipment</li>
+                `}
+                <li>Detailed documentation with photos</li>
+                <li>Status tracking and progress updates</li>
+              </ul>
+            </div>
+            
+            <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+              This report was automatically generated by the ShiftWise system ${isPersonalReport ? 'based on your activities' : 'for the selected time period'}. 
+              If you have any questions about the content, please contact your supervisor.
+            </p>
+            
+            <div style="text-align: center; margin: 40px 0;">
+              <div style="display: inline-block; background-color: #3b82f6; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                📎 Report Attached
+              </div>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #64748b; font-size: 14px; margin: 0 0 10px 0;">
+              This is an automated email from ShiftWise
+            </p>
+            <p style="color: #64748b; font-size: 12px; margin: 0;">
+              Generated on ${new Date().toLocaleString()}
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
     `,
     attachments: [
       {
-        filename: `ShiftWise-Daily-Report-${dateStr}.pdf`,
-        content: pdfBuffer,
+        filename: isPersonalReport 
+          ? `ShiftWise-Personal-Report-${userName}-${dateStr}.pdf`
+          : `ShiftWise-Daily-Report-${dateStr}.pdf`,
+        content: Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer),
         contentType: 'application/pdf',
       },
     ],
   };
+  
+  // Log the final email recipient
+  console.log('- Final email recipient:', mailOptions.to);
   
   // Send email
   await transporter.sendMail(mailOptions);
