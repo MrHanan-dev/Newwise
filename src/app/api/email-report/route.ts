@@ -335,142 +335,177 @@ function generateHTMLContent(reports: any[], userInfo?: any) {
 
 // Send email with PDF attachment - optimized for speed
 async function sendEmail(pdfBuffer: Buffer | Uint8Array, userInfo: any) {
-  // Create a nodemailer transporter with optimized settings
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.example.com',
-    port: parseInt(process.env.EMAIL_PORT || '587'),
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-      user: process.env.EMAIL_USER || 'user@example.com',
-      pass: process.env.EMAIL_PASSWORD || 'password',
-    },
-    // Optimize for speed
-    socketTimeout: 10000,
-    connectionTimeout: 10000,
-    greetingTimeout: 5000
-  });
+  try {
+    console.log('🔧 Starting email configuration...');
+    console.log('📧 Email Host:', process.env.EMAIL_HOST);
+    console.log('🔌 Email Port:', process.env.EMAIL_PORT);
+    console.log('🔒 Email Secure:', process.env.EMAIL_SECURE);
+    console.log('👤 Email User:', process.env.EMAIL_USER ? '***SET***' : 'NOT SET');
+    console.log('🔑 Email Password:', process.env.EMAIL_PASSWORD ? '***SET***' : 'NOT SET');
+    console.log('📤 Email From:', process.env.EMAIL_FROM);
+    console.log('📥 Email Recipient:', process.env.EMAIL_RECIPIENT);
 
-  const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
-  const userName = userInfo?.name || 'Team Member';
-  const isPersonalReport = userInfo?.reportType === 'my-issues';
-  
-  // Debug logging
-  console.log('Email Debug Info:');
-  console.log('- isPersonalReport:', isPersonalReport);
-  console.log('- userInfo?.email:', userInfo?.email);
-  console.log('- process.env.EMAIL_RECIPIENT:', process.env.EMAIL_RECIPIENT);
-  console.log('- userInfo?.reportType:', userInfo?.reportType);
-  
-  // Determine recipient based on report type
-  const emailRecipient = isPersonalReport 
-    ? (userInfo?.email || process.env.EMAIL_RECIPIENT || 'recipient@example.com')
-    : (process.env.EMAIL_RECIPIENT || 'recipient@example.com');
-  
-  console.log('- Email will be sent to:', emailRecipient);
-  console.log('- Report type:', isPersonalReport ? 'Personal (My Issues)' : 'All Issues');
-  
-  // Setup email data
-  const mailOptions = {
-    from: process.env.EMAIL_FROM || 'ShiftWise <shiftwise@example.com>',
-    to: isPersonalReport 
-      ? [userInfo?.email, process.env.EMAIL_RECIPIENT].filter(Boolean).join(',')
-      : (process.env.EMAIL_RECIPIENT || 'recipient@example.com'),
-    subject: isPersonalReport 
-      ? `ShiftWise Personal Issue Report - ${dateStr}`
-      : `ShiftWise Daily Issue Report - ${dateStr}`,
-    text: isPersonalReport 
-      ? `Dear ${userName},\n\nPlease find attached your personal issues report for ${dateStr}.\n\nBest regards,\nShiftWise Team`
-      : `Please find attached the daily issues report for ${dateStr}.\n\nBest regards,\nShiftWise Team`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ShiftWise Report</title>
-      </head>
-      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8fafc;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
-          <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 40px 30px; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">ShiftWise</h1>
-            <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 16px;">Maintenance Management System</p>
-          </div>
-          
-          <!-- Content -->
-          <div style="padding: 40px 30px;">
-            <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 24px; font-weight: 600;">
-              ${isPersonalReport ? 'Personal Issue Report' : 'Daily Issue Report'}
-            </h2>
-            
-            ${isPersonalReport ? `
-              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                Dear <strong style="color: #1e293b;">${userName}</strong>,
-              </p>
-            ` : ''}
-            
-            <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-              Please find attached the ${isPersonalReport ? 'personal ' : ''}issues report for <strong style="color: #1e293b;">${dateStr}</strong>. 
-              ${isPersonalReport 
-                ? 'This report contains all issues that you have created, logged, or resolved during the selected time period.'
-                : 'This report contains all issues reported during the selected time period.'
-              }
-            </p>
-            
-            <div style="background-color: #f1f5f9; border-left: 4px solid #3b82f6; padding: 20px; margin: 30px 0; border-radius: 0 8px 8px 0;">
-              <h3 style="color: #1e293b; margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">Report Summary</h3>
-              <ul style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
-                ${isPersonalReport ? `
-                  <li>Personal issues created and logged</li>
-                  <li>Issues you have resolved or updated</li>
-                ` : `
-                  <li>All issues reported during the period</li>
-                  <li>Issues across all stations and equipment</li>
-                `}
-                <li>Detailed documentation with photos</li>
-                <li>Status tracking and progress updates</li>
-              </ul>
+    // Create a nodemailer transporter with optimized settings
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST || 'smtp.example.com',
+      port: parseInt(process.env.EMAIL_PORT || '587'),
+      secure: process.env.EMAIL_SECURE === 'true',
+      auth: {
+        user: process.env.EMAIL_USER || 'user@example.com',
+        pass: process.env.EMAIL_PASSWORD || 'password',
+      },
+      // Optimize for speed
+      socketTimeout: 10000,
+      connectionTimeout: 10000,
+      greetingTimeout: 5000
+    });
+
+    console.log('✅ Transporter created successfully');
+
+    const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
+    const userName = userInfo?.name || 'Team Member';
+    const isPersonalReport = userInfo?.reportType === 'my-issues';
+    
+    // Debug logging
+    console.log('📋 Email Debug Info:');
+    console.log('- isPersonalReport:', isPersonalReport);
+    console.log('- userInfo?.email:', userInfo?.email);
+    console.log('- process.env.EMAIL_RECIPIENT:', process.env.EMAIL_RECIPIENT);
+    console.log('- userInfo?.reportType:', userInfo?.reportType);
+    
+    // Determine recipient based on report type
+    const emailRecipient = isPersonalReport 
+      ? (userInfo?.email || process.env.EMAIL_RECIPIENT || 'recipient@example.com')
+      : (process.env.EMAIL_RECIPIENT || 'recipient@example.com');
+    
+    console.log('- Email will be sent to:', emailRecipient);
+    console.log('- Report type:', isPersonalReport ? 'Personal (My Issues)' : 'All Issues');
+    
+    // Setup email data
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || 'ShiftWise <shiftwise@example.com>',
+      to: isPersonalReport 
+        ? [userInfo?.email, process.env.EMAIL_RECIPIENT].filter(Boolean).join(',')
+        : (process.env.EMAIL_RECIPIENT || 'recipient@example.com'),
+      subject: isPersonalReport 
+        ? `ShiftWise Personal Issue Report - ${dateStr}`
+        : `ShiftWise Daily Issue Report - ${dateStr}`,
+      text: isPersonalReport 
+        ? `Dear ${userName},\n\nPlease find attached your personal issues report for ${dateStr}.\n\nBest regards,\nShiftWise Team`
+        : `Please find attached the daily issues report for ${dateStr}.\n\nBest regards,\nShiftWise Team`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>ShiftWise Report</title>
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8fafc;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">ShiftWise</h1>
+              <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 16px;">Maintenance Management System</p>
             </div>
             
-            <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-              This report was automatically generated by the ShiftWise system ${isPersonalReport ? 'based on your activities' : 'for the selected time period'}. 
-              If you have any questions about the content, please contact your supervisor.
-            </p>
-            
-            <div style="text-align: center; margin: 40px 0;">
-              <div style="display: inline-block; background-color: #3b82f6; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">
-                📎 Report Attached
+            <!-- Content -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 24px; font-weight: 600;">
+                ${isPersonalReport ? 'Personal Issue Report' : 'Daily Issue Report'}
+              </h2>
+              
+              ${isPersonalReport ? `
+                <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                  Dear <strong style="color: #1e293b;">${userName}</strong>,
+                </p>
+              ` : ''}
+              
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                Please find attached the ${isPersonalReport ? 'personal ' : ''}issues report for <strong style="color: #1e293b;">${dateStr}</strong>. 
+                ${isPersonalReport 
+                  ? 'This report contains all issues that you have created, logged, or resolved during the selected time period.'
+                  : 'This report contains all issues reported during the selected time period.'
+                }
+              </p>
+              
+              <div style="background-color: #f1f5f9; border-left: 4px solid #3b82f6; padding: 20px; margin: 30px 0; border-radius: 0 8px 8px 0;">
+                <h3 style="color: #1e293b; margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">Report Summary</h3>
+                <ul style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                  ${isPersonalReport ? `
+                    <li>Personal issues created and logged</li>
+                    <li>Issues you have resolved or updated</li>
+                  ` : `
+                    <li>All issues reported during the period</li>
+                    <li>Issues across all stations and equipment</li>
+                  `}
+                  <li>Detailed documentation with photos</li>
+                  <li>Status tracking and progress updates</li>
+                </ul>
+              </div>
+              
+              <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                This report was automatically generated by the ShiftWise system ${isPersonalReport ? 'based on your activities' : 'for the selected time period'}. 
+                If you have any questions about the content, please contact your supervisor.
+              </p>
+              
+              <div style="text-align: center; margin: 40px 0;">
+                <div style="display: inline-block; background-color: #3b82f6; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                  📎 Report Attached
+                </div>
               </div>
             </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #64748b; font-size: 14px; margin: 0 0 10px 0;">
+                This is an automated email from ShiftWise
+              </p>
+              <p style="color: #64748b; font-size: 12px; margin: 0;">
+                Generated on ${new Date().toLocaleString()}
+              </p>
+            </div>
           </div>
-          
-          <!-- Footer -->
-          <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-            <p style="color: #64748b; font-size: 14px; margin: 0 0 10px 0;">
-              This is an automated email from ShiftWise
-            </p>
-            <p style="color: #64748b; font-size: 12px; margin: 0;">
-              Generated on ${new Date().toLocaleString()}
-            </p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `,
-    attachments: [
-      {
-        filename: isPersonalReport 
-          ? `ShiftWise-Personal-Report-${userName}-${dateStr}.pdf`
-          : `ShiftWise-Daily-Report-${dateStr}.pdf`,
-        content: Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer),
-        contentType: 'application/pdf',
-      },
-    ],
-  };
-  
-  // Log the final email recipient
-  console.log('- Final email recipient:', mailOptions.to);
-  
-  // Send email
-  await transporter.sendMail(mailOptions);
+        </body>
+        </html>
+      `,
+      attachments: [
+        {
+          filename: isPersonalReport 
+            ? `ShiftWise-Personal-Report-${userName}-${dateStr}.pdf`
+            : `ShiftWise-Daily-Report-${dateStr}.pdf`,
+          content: Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer),
+          contentType: 'application/pdf',
+        },
+      ],
+    };
+    
+    console.log('📤 Mail options configured');
+    console.log('- Final email recipient:', mailOptions.to);
+    console.log('- From address:', mailOptions.from);
+    console.log('- Subject:', mailOptions.subject);
+    
+    // Send email with timeout
+    console.log('🚀 Attempting to send email...');
+    const result = await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Email timeout after 15 seconds')), 15000)
+      )
+    ]);
+    
+    console.log('✅ Email sent successfully!');
+    console.log('📧 Message ID:', (result as any).messageId);
+    
+  } catch (error: any) {
+    console.error('❌ Email sending failed:', error);
+    console.error('🔍 Error details:', {
+      message: error?.message,
+      code: error?.code,
+      command: error?.command,
+      responseCode: error?.responseCode,
+      response: error?.response
+    });
+    throw error;
+  }
 }
