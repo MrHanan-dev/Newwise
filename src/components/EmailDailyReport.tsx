@@ -208,8 +208,8 @@ export function EmailDailyReport() {
             reportType: reportType
           }
         }),
-        // Vercel compatible timeout
-        signal: AbortSignal.timeout(30000) // 30 seconds timeout for Vercel
+        // Standard timeout
+        signal: AbortSignal.timeout(60000) // 60 seconds timeout
       });
 
       if (!response.ok) {
@@ -222,10 +222,10 @@ export function EmailDailyReport() {
                         period === 'yesterday' ? 'yesterday' :
                         period === 'last7days' ? 'last 7 days' : 'last 30 days';
 
-      // Show success message for Vercel
+      // Show immediate success message
       toast({
-        title: "Report Generated!",
-        description: `Your ${reportType === 'my-issues' ? 'personal ' : ''}report for ${periodText} has been generated and emailed successfully.`,
+        title: "Report Started!",
+        description: `Your ${reportType === 'my-issues' ? 'personal ' : ''}report for ${periodText} is being generated and will be emailed shortly.`,
       });
 
       setShowDateDialog(false);

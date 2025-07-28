@@ -4,7 +4,7 @@ import puppeteer from 'puppeteer';
 import logoSvg from './logoSvg'
 import tetraPakLogoSvg from './tetraPakLogoSvg'
 
-// Main API handler - Vercel compatible
+// Main API handler - optimized for speed
 export async function POST(request: Request) {
   try {
     const { reports, userInfo } = await request.json();
@@ -12,26 +12,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No reports provided' }, { status: 400 });
     }
 
-    // For Vercel, we need to process synchronously within the function timeout
-    console.log("Starting PDF generation for Vercel...");
-    const pdfBuffer = await generatePDFWithPuppeteer(reports, userInfo);
-    console.log("PDF generated successfully");
+    // Return immediate success response
+    const response = NextResponse.json({ success: true, message: 'Report generation started' });
     
-    console.log("Sending email...");
-    await sendEmail(pdfBuffer, userInfo);
-    console.log("Email sent successfully");
+    // Process in background for faster response
+    setImmediate(async () => {
+      try {
+        console.log("Starting PDF generation...");
+        const pdfBuffer = await generatePDFWithPuppeteer(reports, userInfo);
+        console.log("PDF generated successfully");
+        
+        console.log("Sending email...");
+        await sendEmail(pdfBuffer, userInfo);
+        console.log("Email sent successfully");
+      } catch (error) {
+        console.error("Background processing error:", error);
+      }
+    });
 
-    return NextResponse.json({ success: true, message: 'Report generated and emailed successfully' });
+    return response;
   } catch (error) {
-    console.error("Error in PDF generation or email sending:", error);
+    console.error("Error in request handling:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: 'Failed to generate report or send email', details: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to process request', details: errorMessage }, { status: 500 });
   }
 }
 
 
 
-// Generate PDF using Puppeteer - Vercel optimized
+// Generate PDF using Puppeteer - optimized for speed
 async function generatePDFWithPuppeteer(reports: any[], userInfo?: any) {
   const browser = await puppeteer.launch({ 
     headless: true, 
@@ -40,43 +49,23 @@ async function generatePDFWithPuppeteer(reports: any[], userInfo?: any) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--no-first-run',
+      '--disable-extensions',
+      '--disable-plugins',
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
-      '--disable-extensions',
-      '--disable-plugins',
-      '--disable-images',
-      '--disable-javascript',
-      '--disable-default-apps',
-      '--disable-sync',
-      '--disable-translate',
-      '--hide-scrollbars',
-      '--mute-audio',
-      '--no-default-browser-check',
-      '--disable-web-security',
-      '--disable-features=VizDisplayCompositor',
-      '--disable-background-networking',
-      '--disable-component-extensions-with-background-pages',
-      '--disable-ipc-flooding-protection',
-      '--disable-hang-monitor',
-      '--disable-prompt-on-repost',
-      '--disable-domain-reliability',
-      '--disable-client-side-phishing-detection',
-      '--disable-component-update',
-      '--metrics-recording-only',
-      '--no-first-run',
-      '--safebrowsing-disable-auto-update',
-      '--single-process',
-      '--no-zygote',
       '--disable-accelerated-2d-canvas',
-      '--disable-features=TranslateUI'
+      '--no-zygote',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor'
     ] 
   });
   
   try {
     const page = await browser.newPage();
     
-    // Vercel optimized page settings
+    // Optimized page settings for speed
     await page.setViewport({ width: 800, height: 600 });
     await page.setCacheEnabled(false);
     await page.setJavaScriptEnabled(false);
@@ -84,20 +73,19 @@ async function generatePDFWithPuppeteer(reports: any[], userInfo?: any) {
     // Create HTML content
     const htmlContent = generateHTMLContent(reports, userInfo);
     
-    // Set content with Vercel-compatible waiting
+    // Set content with faster waiting strategy
     await page.setContent(htmlContent, { 
       waitUntil: 'domcontentloaded', 
       timeout: 10000 
     });
     
-    // Generate PDF with Vercel-compatible settings
+    // Generate PDF with optimized settings
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: { top: '10px', right: '10px', bottom: '10px', left: '10px' },
       preferCSSPageSize: false,
-      displayHeaderFooter: false,
-      scale: 0.8
+      displayHeaderFooter: false
     });
     
     return pdfBuffer;
@@ -345,9 +333,9 @@ function generateHTMLContent(reports: any[], userInfo?: any) {
   `;
 }
 
-// Send email with PDF attachment - maximum speed
+// Send email with PDF attachment - optimized for speed
 async function sendEmail(pdfBuffer: Buffer | Uint8Array, userInfo: any) {
-  // Create a nodemailer transporter with maximum speed settings
+  // Create a nodemailer transporter with optimized settings
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.example.com',
     port: parseInt(process.env.EMAIL_PORT || '587'),
@@ -356,10 +344,10 @@ async function sendEmail(pdfBuffer: Buffer | Uint8Array, userInfo: any) {
       user: process.env.EMAIL_USER || 'user@example.com',
       pass: process.env.EMAIL_PASSWORD || 'password',
     },
-    // Maximum speed settings
-    socketTimeout: 5000,
-    connectionTimeout: 5000,
-    greetingTimeout: 3000
+    // Optimize for speed
+    socketTimeout: 10000,
+    connectionTimeout: 10000,
+    greetingTimeout: 5000
   });
 
   const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
